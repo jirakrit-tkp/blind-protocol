@@ -1,7 +1,12 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 import type { Room, Player, RoomLog } from "../lib/types";
-import { askAI, buildGameMasterPrompt } from "../lib/ollama";
+import {
+  askAI,
+  buildGameMasterPrompt,
+  parseActionResponse,
+  generateGameSetup,
+} from "../lib/ollama";
 
 // Global state to avoid re-initialization (Next.js dev hot reload)
 declare global {
@@ -14,16 +19,25 @@ if (!global.__rooms) {
   global.__rooms = rooms;
 }
 
-const SITUATION =
-  "A spaceship crew is trying to repair the engine. They must work together, but one crew member is secretly sabotaging the mission.";
+const MAIN_ROOM_ID = "MAIN";
+const GAME_PASSCODE = process.env.GAME_PASSCODE ?? "JourneyToJupiter";
 
-function generateRoomId(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let id = "";
-  for (let i = 0; i < 6; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
+function getOrCreateMainRoom(): Room {
+  let room = rooms.get(MAIN_ROOM_ID);
+  if (!room) {
+    room = {
+      id: MAIN_ROOM_ID,
+      players: [],
+      logs: [],
+      currentTurn: 0,
+      roundIndex: 0,
+      phase: "lobby",
+      missionProgress: 0,
+      worldState: {},
+    };
+    rooms.set(MAIN_ROOM_ID, room);
   }
-  return rooms.has(id) ? generateRoomId() : id;
+  return room;
 }
 
 function getRoomForSocket(socketId: string): Room | null {
@@ -31,10 +45,6 @@ function getRoomForSocket(socketId: string): Room | null {
     if (room.players.some((p) => p.id === socketId)) return room;
   }
   return null;
-}
-
-function getPlayerFromRoom(room: Room, socketId: string): Player | undefined {
-  return room.players.find((p) => p.id === socketId);
 }
 
 function getRoomState(room: Room) {
@@ -47,7 +57,11 @@ function getRoomState(room: Room) {
     })),
     logs: room.logs,
     currentTurn: room.currentTurn,
+    roundIndex: room.roundIndex ?? 0,
     phase: room.phase,
+    missionProgress: room.missionProgress,
+    worldState: room.worldState,
+    situation: room.situation,
   };
 }
 
@@ -59,29 +73,16 @@ const io = new Server(httpServer, {
 });
 
 io.on("connection", (socket) => {
-  socket.on("create_room", () => {
-    const roomId = generateRoomId();
-    const room: Room = {
-      id: roomId,
-      players: [],
-      logs: [],
-      currentTurn: 0,
-      phase: "lobby",
-    };
-    rooms.set(roomId, room);
-    socket.join(roomId);
-    socket.emit("room_created", roomId);
-  });
+  socket.on("enter", (payload: { passcode: string; name: string }) => {
+    const { passcode, name } = payload;
+    if (!passcode || !name) return;
 
-  socket.on("join_room", (payload: { roomId: string; name: string }) => {
-    const { roomId, name } = payload;
-    if (!roomId || !name) return;
-
-    const room = rooms.get(roomId);
-    if (!room) {
-      socket.emit("error", { message: "Room not found" });
+    if (passcode !== GAME_PASSCODE) {
+      socket.emit("error", { message: "Invalid passcode" });
       return;
     }
+
+    const room = getOrCreateMainRoom();
     if (room.phase !== "lobby") {
       socket.emit("error", { message: "Game already started" });
       return;
@@ -92,18 +93,32 @@ io.on("connection", (socket) => {
       name: name.trim(),
     };
     room.players.push(player);
-    socket.join(roomId);
+    socket.join(MAIN_ROOM_ID);
 
     const state = getRoomState(room);
-    io.to(roomId).emit("room_update", state);
+    io.to(MAIN_ROOM_ID).emit("room_update", state);
   });
 
-  socket.on("start_game", () => {
+  socket.on("start_game", async (payload: { theme?: string; brief?: string }) => {
     const room = getRoomForSocket(socket.id);
     if (!room) return;
     if (room.phase !== "lobby") return;
     if (room.players.length < 2) {
       socket.emit("error", { message: "Need at least 2 players" });
+      return;
+    }
+
+    const theme = (payload?.theme ?? "ผจญภัย").trim();
+    const brief = payload?.brief?.trim();
+
+    let situation: string;
+    let worldState: Record<string, string | number | boolean>;
+    try {
+      const setup = await generateGameSetup(theme, brief);
+      situation = setup.situation;
+      worldState = setup.worldState;
+    } catch (err) {
+      socket.emit("error", { message: "Failed to generate game setup. Is Ollama running?" });
       return;
     }
 
@@ -113,6 +128,10 @@ io.on("connection", (socket) => {
     });
     room.phase = "playing";
     room.currentTurn = 0;
+    room.roundIndex = 0;
+    room.missionProgress = 0;
+    room.worldState = { protagonist_alive: true, ...worldState };
+    room.situation = situation;
 
     const state = getRoomState(room);
     io.to(room.id).emit("room_update", state);
@@ -120,13 +139,13 @@ io.on("connection", (socket) => {
     io.to(room.id).emit("turn_change", room.players[0]?.id ?? null);
   });
 
-  socket.on("action", async (payload: { roomId: string; action: string }) => {
-    const { roomId, action } = payload;
-    if (!roomId || !action) return;
+  socket.on("action", async (payload: { action: string }) => {
+    const { action } = payload;
+    if (!action) return;
 
-    const room = rooms.get(roomId);
+    const room = getRoomForSocket(socket.id);
     if (!room) {
-      socket.emit("error", { message: "Room not found" });
+      socket.emit("error", { message: "Not in a room" });
       return;
     }
     if (room.phase !== "playing") {
@@ -140,21 +159,36 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const recentActions = room.logs
-      .slice(-5)
-      .map((l) => `${l.action}${l.narrative ? ` → ${l.narrative}` : ""}`);
+    const recentActions = room.logs.slice(-5).map((l) => {
+      const suggestedAction = l.action.includes(": ") ? l.action.split(": ").slice(1).join(": ").trim() : l.action;
+      return `${suggestedAction}${l.narrative ? ` → ${l.narrative}` : ""}`;
+    });
+    const situation =
+      room.situation ??
+      "A collaborative story. One shared protagonist. One imposter among the players.";
+
     const prompt = buildGameMasterPrompt(
-      SITUATION,
+      situation,
       recentActions,
-      `${currentPlayer.name}: ${action}`
+      action,
+      room.worldState,
+      room.missionProgress
     );
 
-    let narrative: string;
+    let rawNarrative: string;
     try {
-      narrative = await askAI(prompt);
+      rawNarrative = await askAI(prompt);
     } catch (err) {
-      narrative = `[The room trembles. Something goes wrong. Perhaps the AI is offline.]`;
+      rawNarrative = `[The room trembles. Something goes wrong. Perhaps the AI is offline.]`;
     }
+
+    const { narrative, progressDelta, stateUpdates, missionPossible } =
+      parseActionResponse(rawNarrative);
+    Object.assign(room.worldState, stateUpdates);
+    room.missionProgress = Math.min(100, room.missionProgress + progressDelta);
+
+    const protagonistDead = room.worldState.protagonist_alive === false;
+    const missionImpossible = !missionPossible;
 
     const log: RoomLog = {
       playerId: socket.id,
@@ -166,32 +200,45 @@ io.on("connection", (socket) => {
     room.currentTurn = (room.currentTurn + 1) % room.players.length;
     const nextPlayer = room.players[room.currentTurn];
 
-    io.to(roomId).emit("new_log", [log]);
-    io.to(roomId).emit("room_update", getRoomState(room));
-    io.to(roomId).emit("turn_change", nextPlayer?.id ?? null);
+    const turnWrappedToZero = room.currentTurn === 0 && room.players.length > 0;
+    if (turnWrappedToZero) {
+      room.roundIndex = (room.roundIndex ?? 0) + 1;
+    }
+
+    const allTurnsUsed = (room.roundIndex ?? 0) >= 3;
+    if (room.missionProgress >= 100) {
+      room.phase = "end";
+      io.to(room.id).emit("phase_change", "end");
+    } else if (protagonistDead || missionImpossible) {
+      room.phase = "end";
+      io.to(room.id).emit("phase_change", "end");
+    } else if (allTurnsUsed) {
+      room.phase = "end";
+      io.to(room.id).emit("phase_change", "end");
+    }
+
+    io.to(room.id).emit("new_log", [log]);
+    io.to(room.id).emit("room_update", getRoomState(room));
+    io.to(room.id).emit("turn_change", nextPlayer?.id ?? null);
   });
 
-  socket.on("vote", (payload: { roomId: string; targetId: string }) => {
-    const { roomId, targetId } = payload;
-    if (!roomId || !targetId) return;
+  socket.on("vote", (payload: { targetId: string }) => {
+    const { targetId } = payload;
+    if (!targetId) return;
 
-    const room = rooms.get(roomId);
+    const room = getRoomForSocket(socket.id);
     if (!room) return;
     if (room.phase !== "voting") return;
 
     // TODO: implement voting logic (collect votes, determine result)
-    io.to(roomId).emit("room_update", getRoomState(room));
+    io.to(room.id).emit("room_update", getRoomState(room));
   });
 
   socket.on("disconnect", () => {
     const room = getRoomForSocket(socket.id);
     if (room) {
       room.players = room.players.filter((p) => p.id !== socket.id);
-      if (room.players.length === 0) {
-        rooms.delete(room.id);
-      } else {
-        io.to(room.id).emit("room_update", getRoomState(room));
-      }
+      io.to(room.id).emit("room_update", getRoomState(room));
     }
   });
 });

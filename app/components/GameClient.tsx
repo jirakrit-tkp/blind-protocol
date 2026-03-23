@@ -3,17 +3,37 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createSocket } from "@/lib/socket-client";
 
+type WorldState = Record<string, string | number | boolean>;
+
 type RoomState = {
   id: string;
   players: { id: string; name: string; role?: "imposter" | "normal" }[];
   logs: { playerId: string; action: string; narrative?: string }[];
   currentTurn: number;
+  roundIndex: number;
   phase: "lobby" | "playing" | "voting" | "end";
+  missionProgress: number;
+  worldState: WorldState;
+  situation?: string;
 };
 
+const THEME_PRESETS = [
+  "สยองขวัญ",
+  "ลึกลับ",
+  "ผจญภัย",
+  "ไซไฟ",
+  "แฟนตาซี",
+  "ดิ้นรน",
+  "ตลก",
+  "ละคร",
+] as const;
+
 function GameClient() {
-  const [roomId, setRoomId] = useState("");
+  const [passcode, setPasscode] = useState("");
   const [name, setName] = useState("");
+  const [theme, setTheme] = useState("");
+  const [brief, setBrief] = useState("");
+  const [isStarting, setIsStarting] = useState(false);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [actionInput, setActionInput] = useState("");
   const [error, setError] = useState("");
@@ -24,19 +44,9 @@ function GameClient() {
     const socket = createSocket();
     socketRef.current = socket;
 
-    socket.on("room_created", (id: string) => {
-      setRoomId(id);
-      setRoomState({
-        id,
-        players: [],
-        logs: [],
-        currentTurn: 0,
-        phase: "lobby",
-      });
-    });
-
     socket.on("room_update", (state: RoomState) => {
       setRoomState(state);
+      if (state.phase !== "lobby") setIsStarting(false);
     });
 
     socket.on("new_log", (logs: { playerId: string; action: string; narrative?: string }[]) => {
@@ -47,16 +57,13 @@ function GameClient() {
       );
     });
 
-    socket.on("turn_change", () => {
-      // Turn state comes from room_update
-    });
-
     socket.on("phase_change", (phase: string) => {
       setRoomState((prev) => (prev ? { ...prev, phase: phase as RoomState["phase"] } : null));
     });
 
     socket.on("error", (payload: { message: string }) => {
       setError(payload.message);
+      setIsStarting(false);
     });
 
     socket.connect();
@@ -69,33 +76,32 @@ function GameClient() {
     };
   }, [connect]);
 
-  const handleCreateRoom = () => {
+  const handleEnter = () => {
     setError("");
-    socketRef.current?.emit("create_room");
-  };
-
-  const handleJoinRoom = () => {
-    setError("");
-    const idToUse = roomState?.id ?? roomId;
-    if (!idToUse.trim() || !name.trim()) {
-      setError("Room ID and name required");
+    if (!passcode.trim() || !name.trim()) {
+      setError("Passcode and name required");
       return;
     }
-    socketRef.current?.emit("join_room", { roomId: idToUse.trim(), name: name.trim() });
+    socketRef.current?.emit("enter", {
+      passcode: passcode.trim(),
+      name: name.trim(),
+    });
   };
 
   const handleStartGame = () => {
     setError("");
-    socketRef.current?.emit("start_game");
+    setIsStarting(true);
+    const themeToUse = theme.trim() || THEME_PRESETS[0];
+    socketRef.current?.emit("start_game", {
+      theme: themeToUse,
+      brief: brief.trim() || undefined,
+    });
   };
 
   const handleAction = () => {
     setError("");
     if (!actionInput.trim() || !roomState) return;
-    socketRef.current?.emit("action", {
-      roomId: roomState.id,
-      action: actionInput.trim(),
-    });
+    socketRef.current?.emit("action", { action: actionInput.trim() });
     setActionInput("");
   };
 
@@ -115,87 +121,138 @@ function GameClient() {
       )}
 
       {!roomState ? (
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={handleCreateRoom}
-            className="px-4 py-2 bg-blue-600 text-white rounded w-fit"
-          >
-            Create Room
-          </button>
-          <hr />
-          <h2>Or join existing room</h2>
-          <label>
-            Room ID:
+        <div className="flex flex-col gap-4">
+          <h2 className="text-lg font-medium">Enter passcode to access</h2>
+          <label className="flex flex-col gap-1">
+            <span>Passcode</span>
             <input
-              type="text"
-              value={roomId}
-              onChange={(e) => setRoomId(e.target.value)}
-              placeholder="Enter room ID"
-              className="ml-2 border px-2 py-1"
+              type="password"
+              value={passcode}
+              onChange={(e) => setPasscode(e.target.value)}
+              placeholder="Enter passcode"
+              className="border px-3 py-2 rounded"
+              onKeyDown={(e) => e.key === "Enter" && handleEnter()}
             />
           </label>
-          <label>
-            Your name:
+          <label className="flex flex-col gap-1">
+            <span>Your name</span>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Enter name"
-              className="ml-2 border px-2 py-1"
+              className="border px-3 py-2 rounded"
+              onKeyDown={(e) => e.key === "Enter" && handleEnter()}
             />
           </label>
           <button
             type="button"
-            onClick={handleJoinRoom}
-            className="px-4 py-2 bg-green-600 text-white rounded w-fit"
+            onClick={handleEnter}
+            disabled={!passcode.trim() || !name.trim()}
+            className="px-4 py-2 bg-blue-600 text-white rounded w-fit disabled:opacity-50"
           >
-            Join Room
+            Enter
           </button>
         </div>
       ) : roomState.phase === "lobby" ? (
-        <div className="flex flex-col gap-2">
-          <label>
-            Room ID:
-            <input
-              type="text"
-              value={roomState?.id ?? roomId}
-              onChange={(e) => setRoomId(e.target.value)}
-              placeholder="Enter or paste room ID"
-              readOnly={!!roomState}
-              className="ml-2 border px-2 py-1"
-            />
-          </label>
-          <label>
-            Your name:
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter name"
-              className="ml-2 border px-2 py-1"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handleJoinRoom}
-            className="px-4 py-2 bg-green-600 text-white rounded w-fit"
-          >
-            Join Room
-          </button>
+        <div className="flex flex-col gap-4">
           <p>Players: {roomState.players.map((p) => p.name).join(", ") || "(none)"}</p>
+          <div className="flex flex-col gap-2">
+            <label>
+              <span className="block text-sm font-medium mb-1">Theme (ธีม)</span>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {THEME_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setTheme(theme === preset ? "" : preset)}
+                    className={`px-3 py-1.5 rounded text-sm ${
+                      theme === preset
+                        ? "bg-purple-600 text-white"
+                        : "bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={theme}
+                onChange={(e) => setTheme(e.target.value)}
+                placeholder="พิมพ์ธีมเอง เช่น noir, post-apocalyptic"
+                className="w-full border px-3 py-2 rounded"
+              />
+            </label>
+            <label>
+              <span className="block text-sm font-medium mb-1">
+                Brief (ไม่บังคับ) — อธิบายสถานการณ์คร่าว ๆ
+              </span>
+              <textarea
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+                placeholder="เช่น กลุ่มคนติดในลิฟต์, ลูกเรือต้องซ่อมเครื่องยนต์ระหว่างหลบศัตรู"
+                rows={2}
+                className="w-full border px-3 py-2 rounded resize-none"
+              />
+            </label>
+          </div>
           <button
             type="button"
             onClick={handleStartGame}
-            disabled={roomState.players.length < 2}
+            disabled={roomState.players.length < 2 || isStarting}
             className="px-4 py-2 bg-purple-600 text-white rounded w-fit disabled:opacity-50"
           >
-            Start Game
+            {isStarting ? "Generating…" : "Start Game"}
           </button>
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           <p>Phase: {roomState.phase}</p>
+          {roomState.phase === "playing" && (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Round {(roomState.roundIndex ?? 0) + 1}/3 — 3 turns per player
+            </p>
+          )}
+          {roomState.situation && (
+            <div className="rounded bg-zinc-100 dark:bg-zinc-800 p-3 text-sm">
+              <p className="font-medium mb-1">Situation</p>
+              <p className="text-zinc-700 dark:text-zinc-300">{roomState.situation}</p>
+            </div>
+          )}
+          <div>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Mission progress: {roomState.missionProgress ?? 0}%
+              </p>
+              <div className="mt-1 h-2 w-full rounded-full bg-zinc-200 dark:bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-green-600 transition-all"
+                  style={{ width: `${Math.max(0, Math.min(100, roomState.missionProgress ?? 0))}%` }}
+                />
+              </div>
+            </div>
+          {roomState.phase === "end" && (
+            <p
+              className={`font-medium ${
+                (roomState.missionProgress ?? 0) >= 100 ? "text-green-600" : "text-red-600"
+              }`}
+              role="status"
+            >
+              {(roomState.missionProgress ?? 0) >= 100
+                ? "Mission passed."
+                : "Mission failed."}
+            </p>
+          )}
+          {Object.keys(roomState.worldState ?? {}).length > 0 && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-zinc-600 dark:text-zinc-400">
+                World state
+              </summary>
+              <pre className="mt-1 p-2 rounded bg-zinc-100 dark:bg-zinc-800 overflow-x-auto">
+                {JSON.stringify(roomState.worldState, null, 2)}
+              </pre>
+            </details>
+          )}
           <p>Players: {roomState.players.map((p) => p.name).join(", ")}</p>
           <p>
             Current turn: {roomState.players[roomState.currentTurn]?.name ?? "—"}
