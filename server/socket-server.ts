@@ -3,10 +3,21 @@ import { Server } from "socket.io";
 import type { Room, Player, RoomLog } from "../lib/types";
 import {
   askAI,
+  buildAftermathPrompt,
   buildGameMasterPrompt,
   parseActionResponse,
-  generateGameSetup,
 } from "../lib/ollama";
+import {
+  getThemeLabelsFromScenarioPool,
+  pickRandomScenarioFromPool,
+} from "../lib/scenario-pool";
+import {
+  SYSTEM_LOG_PLAYER_ID,
+  defaultSystemWorldState,
+  isMissionWon,
+  isSystemProtagonistDead,
+  isSystemProtagonistPlayable,
+} from "../lib/world-state";
 
 // Global state to avoid re-initialization (Next.js dev hot reload)
 declare global {
@@ -65,6 +76,52 @@ function getRoomState(room: Room) {
   };
 }
 
+const AFTERMATH_MAX_STEPS = 8;
+
+async function runAftermathNarration(
+  io: Server,
+  room: Room,
+  situation: string
+): Promise<void> {
+  for (let step = 0; step < AFTERMATH_MAX_STEPS; step++) {
+    if (isMissionWon(room.worldState, room.missionProgress)) return;
+
+    const recentEvents = room.logs.slice(-5).map((l) => {
+      const suggestedAction = l.action.includes(": ")
+        ? l.action.split(": ").slice(1).join(": ").trim()
+        : l.action;
+      return `${suggestedAction}${l.narrative ? ` → ${l.narrative}` : ""}`;
+    });
+
+    let raw: string;
+    try {
+      raw = await askAI(
+        buildAftermathPrompt(situation, recentEvents, room.worldState, room.missionProgress)
+      );
+    } catch {
+      raw = `[เหตุการณ์ดำเนินต่อ — ระบบ AI ไม่พร้อม]`;
+    }
+
+    const { narrative, progressDelta, stateUpdates, missionPossible } = parseActionResponse(raw);
+    Object.assign(room.worldState, stateUpdates);
+    room.missionProgress = Math.min(100, room.missionProgress + progressDelta);
+
+    const aftermathLog: RoomLog = {
+      playerId: SYSTEM_LOG_PLAYER_ID,
+      action: "[ระบบ] ต่อเหตุการณ์หลังตัวละครหลักเล่นไม่ได้",
+      narrative,
+    };
+    room.logs.push(aftermathLog);
+    io.to(room.id).emit("new_log", [aftermathLog]);
+    io.to(room.id).emit("room_update", getRoomState(room));
+    io.to(room.id).emit("turn_change", null);
+
+    if (isMissionWon(room.worldState, room.missionProgress) || !missionPossible) {
+      return;
+    }
+  }
+}
+
 const httpServer = createServer();
 const io = new Server(httpServer, {
   cors: {
@@ -99,7 +156,7 @@ io.on("connection", (socket) => {
     io.to(MAIN_ROOM_ID).emit("room_update", state);
   });
 
-  socket.on("start_game", async (payload: { theme?: string; brief?: string }) => {
+  socket.on("start_game", (payload: { theme?: string }) => {
     const room = getRoomForSocket(socket.id);
     if (!room) return;
     if (room.phase !== "lobby") return;
@@ -108,19 +165,20 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const theme = (payload?.theme ?? "ผจญภัย").trim();
-    const brief = payload?.brief?.trim();
-
-    let situation: string;
-    let worldState: Record<string, string | number | boolean>;
-    try {
-      const setup = await generateGameSetup(theme, brief);
-      situation = setup.situation;
-      worldState = setup.worldState;
-    } catch (err) {
-      socket.emit("error", { message: "Failed to generate game setup. Is Ollama running?" });
+    const theme = payload?.theme?.trim() ?? "";
+    const allowedThemes = new Set(getThemeLabelsFromScenarioPool());
+    if (!theme || !allowedThemes.has(theme)) {
+      socket.emit("error", { message: "เลือกธีมจากรายการที่มีในเกม" });
       return;
     }
+
+    const fromPool = pickRandomScenarioFromPool(theme);
+    if (!fromPool) {
+      socket.emit("error", { message: "ไม่มีสถานการณ์สำหรับธีมนี้" });
+      return;
+    }
+
+    const { situation, worldState } = fromPool;
 
     const imposterIndex = Math.floor(Math.random() * room.players.length);
     room.players.forEach((p, i) => {
@@ -130,7 +188,7 @@ io.on("connection", (socket) => {
     room.currentTurn = 0;
     room.roundIndex = 0;
     room.missionProgress = 0;
-    room.worldState = { protagonist_alive: true, ...worldState };
+    room.worldState = { ...defaultSystemWorldState(), ...worldState };
     room.situation = situation;
 
     const state = getRoomState(room);
@@ -150,6 +208,13 @@ io.on("connection", (socket) => {
     }
     if (room.phase !== "playing") {
       socket.emit("error", { message: "Not in playing phase" });
+      return;
+    }
+
+    if (!isSystemProtagonistPlayable(room.worldState)) {
+      socket.emit("error", {
+        message: "ตัวละครหลักเล่นไม่ได้แล้ว — รอให้เรื่องดำเนินต่อ (ระบบ)",
+      });
       return;
     }
 
@@ -187,7 +252,7 @@ io.on("connection", (socket) => {
     Object.assign(room.worldState, stateUpdates);
     room.missionProgress = Math.min(100, room.missionProgress + progressDelta);
 
-    const protagonistDead = room.worldState.protagonist_alive === false;
+    const protagonistUnplayable = isSystemProtagonistDead(room.worldState);
     const missionImpossible = !missionPossible;
 
     const log: RoomLog = {
@@ -197,29 +262,40 @@ io.on("connection", (socket) => {
     };
     room.logs.push(log);
 
-    room.currentTurn = (room.currentTurn + 1) % room.players.length;
-    const nextPlayer = room.players[room.currentTurn];
-
-    const turnWrappedToZero = room.currentTurn === 0 && room.players.length > 0;
-    if (turnWrappedToZero) {
-      room.roundIndex = (room.roundIndex ?? 0) + 1;
+    if (!protagonistUnplayable) {
+      room.currentTurn = (room.currentTurn + 1) % room.players.length;
+      if (room.currentTurn === 0 && room.players.length > 0) {
+        room.roundIndex = (room.roundIndex ?? 0) + 1;
+      }
     }
 
+    const nextPlayer = room.players[room.currentTurn];
     const allTurnsUsed = (room.roundIndex ?? 0) >= 3;
-    if (room.missionProgress >= 100) {
+
+    io.to(room.id).emit("new_log", [log]);
+    io.to(room.id).emit("room_update", getRoomState(room));
+
+    if (isMissionWon(room.worldState, room.missionProgress)) {
       room.phase = "end";
       io.to(room.id).emit("phase_change", "end");
-    } else if (protagonistDead || missionImpossible) {
+      io.to(room.id).emit("turn_change", null);
+    } else if (missionImpossible) {
       room.phase = "end";
+      io.to(room.id).emit("phase_change", "end");
+      io.to(room.id).emit("turn_change", null);
+    } else if (protagonistUnplayable) {
+      io.to(room.id).emit("turn_change", null);
+      await runAftermathNarration(io, room, situation);
+      room.phase = "end";
+      io.to(room.id).emit("room_update", getRoomState(room));
       io.to(room.id).emit("phase_change", "end");
     } else if (allTurnsUsed) {
       room.phase = "end";
       io.to(room.id).emit("phase_change", "end");
+      io.to(room.id).emit("turn_change", null);
+    } else {
+      io.to(room.id).emit("turn_change", nextPlayer?.id ?? null);
     }
-
-    io.to(room.id).emit("new_log", [log]);
-    io.to(room.id).emit("room_update", getRoomState(room));
-    io.to(room.id).emit("turn_change", nextPlayer?.id ?? null);
   });
 
   socket.on("vote", (payload: { targetId: string }) => {

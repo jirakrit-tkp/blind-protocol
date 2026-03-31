@@ -1,0 +1,29 @@
+{
+  "scenarios": [
+    {
+      "themes": ["อาชญากรรม", "เมือง", "ระทึก"],
+      "situation": "เราเป็นเจ้าของร้านทอง เปิดร้านตามปกติ แล้วโจรก็เข้ามาในห้องขาย ไม่มีลูกค้าคนอื่น มีแต่ภัยคุกคามชัดตรงหน้า เสียงก้าวกับปืนในมือท่าทีกดดัน ข้างนอกได้ยินเสียงรถผ่านถนนราวกับไม่มีอะไรเกิดขึ้น ในร้านไฟสว่าง ทองหลังกระจกโชว์ที่ยังไม่แตก ประตูตู้โชว์ปิด กระจกหน้าร้านยังสมบูรณ์ ห้องเซฟล็อก ทางหลังกับห้องหลังปิดสนิท โทรศัพท์อยู่บนเคาน์เตอร์ ปุ่มแจ้งเหตุใต้เคาน์เตอร์ยังไม่ได้กด ระบบแจ้งเหตุยังเงียบ โจรยังไม่ได้เอาทองหนีไป เราต้องไม่ให้โจรเอาทองไปได้ และเรียกตำรวจให้เร็วที่สุด",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_robbers_escaped_with_loot": "no",
+        "goal_police_summoned": "no",
+        "robbers_perceived_demeanor": "agitated",
+        "robbers_presence": "inside_sales_floor",
+        "robbers_visible_threat": "firearm_visible",
+        "shop_back_office_door": "locked",
+        "shop_civilian_presence": "none",
+        "shop_display_case_front": "closed",
+        "shop_display_glass": "intact",
+        "shop_front_entry": "open",
+        "shop_front_window_glass": "intact",
+        "shop_landline_phone": "visible_on_counter",
+        "shop_lights": "on",
+        "shop_rear_emergency_exit": "locked",
+        "shop_silent_alarm": "off",
+        "shop_silent_alarm_button": "visible_below_counter",
+        "shop_street_audible": "traffic",
+        "shop_vault_room_door": "locked"
+      }
+    }
+  ]
+}

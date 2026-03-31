@@ -20,6 +20,7 @@ export async function askAI(prompt: string): Promise<string> {
 }
 
 import type { WorldState } from "./types";
+import { SYSTEM_PROTAGONIST_ALIVE, defaultSystemWorldState } from "./world-state";
 
 /** Generate situation + initial world state from theme + optional brief */
 export async function generateGameSetup(
@@ -41,10 +42,10 @@ Generate a game setup. Write EVERYTHING in Thai.
 1. situation: 2-3 sentences. Use "เรา" (we)—start with "เราคือ..." or "เราเป็น...". The MISSION must be CONCRETE and ACTIONABLE—a specific task we can do right away. NOT vague investigation.
    - Good: "ภารกิจคือเปิดประตูห้องควบคุม", "ภารกิจคือซ่อมเครื่องยนต์ให้ทำงาน", "ภารกิจคือนำกุญแจ 3 ดอกมาที่ประตูหลัก"
    - Bad: "ค้นหาเหตุผลการหายตัว", "สอบสวนเรื่องราวประหลาด", "สำรวจสถานีลึกลับ"—too vague, no clear action.
-2. worldState: 4-8 key-value pairs. MUST include protagonist_alive: true. Use snake_case keys.
+2. worldState: 4-8 key-value pairs. MUST include system_protagonist_alive: "yes". Use snake_case keys.
 
 World state rules (critical):
-- ALWAYS include protagonist_alive: true (required)
+- ALWAYS include system_protagonist_alive: "yes" (required) — system: players can still control the shared protagonist
 - Store environment conditions: locked/unlocked, damaged/intact, on/off, level (0-100)
 - NO counts, NO event flags, NO mental/social state
 
@@ -56,7 +57,7 @@ Respond with ONLY valid JSON. situation must be in Thai:
   if (!jsonMatch) {
     return {
       situation: `เราเป็นตัวละครหลัก ภารกิจของเราคือเรื่องที่เกี่ยวกับ: ${theme}`,
-      worldState: { theme, ready: false },
+      worldState: { ...defaultSystemWorldState(), theme, ready: false },
     };
   }
   try {
@@ -68,7 +69,7 @@ Respond with ONLY valid JSON. situation must be in Thai:
       typeof parsed.situation === "string"
         ? parsed.situation
         : `เราเป็นตัวละครหลัก ภารกิจของเราคือเรื่องที่เกี่ยวกับ: ${theme}`;
-    const worldState: WorldState = { protagonist_alive: true };
+    const worldState: WorldState = { ...defaultSystemWorldState() };
     if (parsed.worldState && typeof parsed.worldState === "object") {
       for (const [k, v] of Object.entries(parsed.worldState)) {
         if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
@@ -78,12 +79,12 @@ Respond with ONLY valid JSON. situation must be in Thai:
         }
       }
     }
-    if (!("protagonist_alive" in worldState)) worldState.protagonist_alive = true;
+    if (!(SYSTEM_PROTAGONIST_ALIVE in worldState)) worldState[SYSTEM_PROTAGONIST_ALIVE] = "yes";
     return { situation, worldState };
   } catch {
     return {
       situation: `เราเป็นตัวละครหลัก ภารกิจของเราคือเรื่องที่เกี่ยวกับ: ${theme}`,
-      worldState: { theme, ready: false },
+      worldState: { ...defaultSystemWorldState(), theme, ready: false },
     };
   }
 }
@@ -113,7 +114,7 @@ Rules:
   2. [STATE_UPDATES] block: key=value (one per line), then [/STATE_UPDATES].
 
 State update rules (critical): Store ONLY environment state that EXISTS. NO counts, NO event flags.
-- When protagonist DIES, set protagonist_alive=false in STATE_UPDATES.
+- When the shared protagonist DIES (no longer controllable by players), set system_protagonist_alive=no in STATE_UPDATES.
 - When mission becomes IMPOSSIBLE (critical equipment destroyed, no path to success), add [MISSION_IMPOSSIBLE] anywhere at the end of your response.
 - Update keys when physical state changes. ADD new keys when protagonist discovers something. Use: strings, numbers, booleans.
 
@@ -130,6 +131,40 @@ ${recentActions.length > 0 ? recentActions.join("\n") : "(none yet)"}
 
 Next action the protagonist takes (suggested by crew):
 ${playerAction}`;
+}
+
+/** หลัง system_protagonist_alive = no — ไม่มี input จากผู้เล่น; โลกดำเนินต่อ (ตำรวจ โจร ฯลฯ) */
+export function buildAftermathPrompt(
+  situation: string,
+  recentEvents: string[],
+  worldState: WorldState,
+  missionProgress: number
+): string {
+  const worldStateStr = Object.entries(worldState)
+    .map(([k, v]) => `  ${k}: ${v}`)
+    .join("\n");
+  return `You are the game master for Blind Protocol. Respond ONLY in Thai.
+
+The shared protagonist can NO LONGER be controlled by players (system_protagonist_alive is no). There is NO player suggestion this turn—the world continues on its own (police, robbers, environment, bystanders, etc.).
+
+Rules:
+- Do NOT write as if "เรา" is still taking voluntary actions unless it is unconscious reflex or others' actions on us.
+- Narrate what happens next neutrally in Thai.
+- End with [PROGRESS:X] and [STATE_UPDATES]...[/STATE_UPDATES] like the normal game master.
+- When mission becomes IMPOSSIBLE, add [MISSION_IMPOSSIBLE].
+
+Current world state:
+${worldStateStr || "(none)"}
+
+Mission progress: ${missionProgress}%
+
+Situation:
+${situation}
+
+Recent events:
+${recentEvents.length > 0 ? recentEvents.join("\n") : "(none yet)"}
+
+Continue the scene with NO player input—automatic continuation.`;
 }
 
 const PROGRESS_REGEX = /\[PROGRESS:([+-]?\d+)\]\s*$/im;

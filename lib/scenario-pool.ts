@@ -1,0 +1,113 @@
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import type { WorldState } from "./types";
+import { THEME_LABELS } from "./theme-catalog";
+import { SYSTEM_PROTAGONIST_ALIVE, defaultSystemWorldState } from "./world-state";
+
+const libDir = dirname(fileURLToPath(import.meta.url));
+
+const validThemeTags = new Set(THEME_LABELS);
+
+type ScenarioFileEntry = {
+  /** แท็กธีมจาก data/themes.json (label) อย่างน้อย 1 รายการ */
+  themes: string[];
+  situation: string;
+  worldState: WorldState;
+};
+
+type ScenarioFile = {
+  scenarios: ScenarioFileEntry[];
+};
+
+let cached: ScenarioFileEntry[] | null = null;
+
+function scenarioPoolPath(): string {
+  return join(libDir, "..", "data", "scenarios.json");
+}
+
+function isValidScenarioEntry(s: unknown): s is ScenarioFileEntry {
+  if (!s || typeof s !== "object") return false;
+  const o = s as Record<string, unknown>;
+  if (typeof o.situation !== "string" || o.situation.trim().length === 0) return false;
+  if (!o.worldState || typeof o.worldState !== "object") return false;
+  if (!Array.isArray(o.themes) || o.themes.length === 0) return false;
+  for (const tag of o.themes) {
+    if (typeof tag !== "string" || !validThemeTags.has(tag)) {
+      console.warn(
+        `[scenario-pool] skip: invalid or unknown theme tag "${String(tag)}" (must exist in data/themes.json)`
+      );
+      return false;
+    }
+  }
+  return true;
+}
+
+function loadPool(): ScenarioFileEntry[] {
+  if (cached) return cached;
+  try {
+    const raw = readFileSync(scenarioPoolPath(), "utf-8");
+    const parsed = JSON.parse(raw) as ScenarioFile;
+    const list = Array.isArray(parsed.scenarios) ? parsed.scenarios : [];
+    cached = list.filter(isValidScenarioEntry);
+  } catch {
+    cached = [];
+  }
+  return cached;
+}
+
+function normalizeWorldState(ws: WorldState): WorldState {
+  const out: WorldState = { ...defaultSystemWorldState() };
+  for (const [k, v] of Object.entries(ws)) {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+      out[k] = v;
+    }
+  }
+  if (!(SYSTEM_PROTAGONIST_ALIVE in out)) out[SYSTEM_PROTAGONIST_ALIVE] = "yes";
+  return out;
+}
+
+function matchesTheme(entry: ScenarioFileEntry, theme: string): boolean {
+  const t = theme.trim();
+  return entry.themes.some((tag) => tag === t);
+}
+
+/** แท็กธีมจาก data/scenarios.json (ไม่ซ้ำ เรียงตาม locale) — ใช้สำหรับ UI / ตรวจ server */
+export function getThemeLabelsFromScenarioPool(): string[] {
+  const pool = loadPool();
+  const set = new Set<string>();
+  for (const e of pool) {
+    for (const t of e.themes) set.add(t);
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "th"));
+}
+
+/**
+ * สุ่มสถานการณ์จากไฟล์ data/scenarios.json ที่มีแท็กธีมตรงกับ `theme` (ต้องตรงทุกตัวอักษร)
+ * ไม่มีแมตช์หรือไม่มี pool → คืน null
+ */
+export function pickRandomScenarioFromPool(theme: string): {
+  situation: string;
+  worldState: WorldState;
+} | null {
+  const pool = loadPool();
+  if (pool.length === 0) return null;
+
+  const t = theme.trim();
+  if (!t) return null;
+
+  const matched = pool.filter((e) => matchesTheme(e, t));
+  if (matched.length === 0) return null;
+
+  const i = Math.floor(Math.random() * matched.length);
+  const chosen = matched[i];
+  return {
+    situation: chosen.situation.trim(),
+    worldState: normalizeWorldState(chosen.worldState),
+  };
+}
+
+/** สำหรับเทส / reload หลังแก้ไฟล์ */
+export function clearScenarioPoolCache(): void {
+  cached = null;
+}

@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createSocket } from "@/lib/socket-client";
+import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
+import { isSystemProtagonistPlayable } from "@/lib/world-state";
 
 type WorldState = Record<string, string | number | boolean>;
 
@@ -17,22 +19,10 @@ type RoomState = {
   situation?: string;
 };
 
-const THEME_PRESETS = [
-  "สยองขวัญ",
-  "ลึกลับ",
-  "ผจญภัย",
-  "ไซไฟ",
-  "แฟนตาซี",
-  "ดิ้นรน",
-  "ตลก",
-  "ละคร",
-] as const;
-
 function GameClient() {
   const [passcode, setPasscode] = useState("");
   const [name, setName] = useState("");
-  const [theme, setTheme] = useState("");
-  const [brief, setBrief] = useState("");
+  const [theme, setTheme] = useState(SCENARIO_THEME_LABELS[0] ?? "");
   const [isStarting, setIsStarting] = useState(false);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [actionInput, setActionInput] = useState("");
@@ -90,12 +80,13 @@ function GameClient() {
 
   const handleStartGame = () => {
     setError("");
+    const themeToUse = theme.trim();
+    if (!themeToUse || !SCENARIO_THEME_LABELS.includes(themeToUse)) {
+      setError("เลือกธีมจากรายการ");
+      return;
+    }
     setIsStarting(true);
-    const themeToUse = theme.trim() || THEME_PRESETS[0];
-    socketRef.current?.emit("start_game", {
-      theme: themeToUse,
-      brief: brief.trim() || undefined,
-    });
+    socketRef.current?.emit("start_game", { theme: themeToUse });
   };
 
   const handleAction = () => {
@@ -108,6 +99,7 @@ function GameClient() {
   const isMyTurn =
     roomState &&
     roomState.phase === "playing" &&
+    isSystemProtagonistPlayable(roomState.worldState) &&
     roomState.players[roomState.currentTurn]?.id === socketRef.current?.id;
 
   return (
@@ -158,52 +150,47 @@ function GameClient() {
         <div className="flex flex-col gap-4">
           <p>Players: {roomState.players.map((p) => p.name).join(", ") || "(none)"}</p>
           <div className="flex flex-col gap-2">
-            <label>
-              <span className="block text-sm font-medium mb-1">Theme (ธีม)</span>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {THEME_PRESETS.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setTheme(theme === preset ? "" : preset)}
-                    className={`px-3 py-1.5 rounded text-sm ${
-                      theme === preset
-                        ? "bg-purple-600 text-white"
-                        : "bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600"
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                ))}
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              เลือกธีม — สุ่มสถานการณ์จากไฟล์ scenarios ตามธีมที่เลือก
+            </p>
+            <fieldset className="flex flex-col gap-2 border-0 p-0 m-0">
+              <legend className="block text-sm font-medium mb-1">ธีม</legend>
+              <div className="flex flex-wrap gap-2">
+                {SCENARIO_THEME_LABELS.length === 0 ? (
+                  <p className="text-sm text-red-600" role="status">
+                    ยังไม่มีธีมใน scenarios — เพิ่ม data/scenarios.json
+                  </p>
+                ) : (
+                  SCENARIO_THEME_LABELS.map((label) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setTheme(label)}
+                      className={`px-3 py-1.5 rounded text-sm ${
+                        theme === label
+                          ? "bg-purple-600 text-white"
+                          : "bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))
+                )}
               </div>
-              <input
-                type="text"
-                value={theme}
-                onChange={(e) => setTheme(e.target.value)}
-                placeholder="พิมพ์ธีมเอง เช่น noir, post-apocalyptic"
-                className="w-full border px-3 py-2 rounded"
-              />
-            </label>
-            <label>
-              <span className="block text-sm font-medium mb-1">
-                Brief (ไม่บังคับ) — อธิบายสถานการณ์คร่าว ๆ
-              </span>
-              <textarea
-                value={brief}
-                onChange={(e) => setBrief(e.target.value)}
-                placeholder="เช่น กลุ่มคนติดในลิฟต์, ลูกเรือต้องซ่อมเครื่องยนต์ระหว่างหลบศัตรู"
-                rows={2}
-                className="w-full border px-3 py-2 rounded resize-none"
-              />
-            </label>
+            </fieldset>
           </div>
           <button
             type="button"
             onClick={handleStartGame}
-            disabled={roomState.players.length < 2 || isStarting}
+            disabled={
+              roomState.players.length < 2 ||
+              isStarting ||
+              SCENARIO_THEME_LABELS.length === 0 ||
+              !SCENARIO_THEME_LABELS.includes(theme.trim())
+            }
             className="px-4 py-2 bg-purple-600 text-white rounded w-fit disabled:opacity-50"
           >
-            {isStarting ? "Generating…" : "Start Game"}
+            {isStarting ? "กำลังเริ่ม…" : "Start Game"}
           </button>
         </div>
       ) : (
