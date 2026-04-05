@@ -24,6 +24,206 @@
         "shop_street_audible": "traffic",
         "shop_vault_room_door": "locked"
       }
+    },
+    {
+      "themes": ["อวกาศ", "ไซไฟ", "ระทึก"],
+      "situation": "เราอยู่ในโมดูลอยู่อาศัยของสถานีวงโคจร ไฟฉุกเฉินสลับแดงกับขาว เสียงสัญญาณเตือนดังแผ่วแต่ไม่หยุด บนจอสถานะเห็นค่าความดันโมดูลลดลงเรื่อย ๆ รอยรั่วเล็กบนท่อเหนือหัวมีหยดละอองลอย แผงควบคุมแสดงว่าประตูสู่ทางเดินหลักยังล็อกจากระบบ ช่องสื่อสารฉุกเฉินยังไม่ขึ้นว่ามีการรับสายจากพื้นฐาน ข้างนอกหน้าตูดูเหมือนความมืดของอวกาศธรรมดา เราต้องไม่ให้เกิดการแตกของโมดูลจนผู้คนในส่วนนี้ถูกดูดออกไป และต้องส่งสัญญาณขอความช่วยเหลือให้ฐานรับรู้แน่นอน",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_module_decompression_cascade": "no",
+        "goal_distress_acknowledged_by_command": "no",
+        "station_alarm_audible": "intermittent",
+        "station_comms_emergency_channel": "idle_no_ack",
+        "station_corridor_airlock_to_spine": "locked_by_system",
+        "station_leak_visible": "yes_mist_from_pipe",
+        "station_pressure_trend": "falling_slowly",
+        "station_viewport_exterior": "dark_space_visible",
+        "station_emergency_lights": "on_rotating"
+      }
+    },
+    {
+      "themes": ["เรือดำน้ำ", "ดิ้นรน", "ระทึก"],
+      "situation": "เราอยู่ห้องควบคุมเรือดำน้ำลึกใต้น้ำ เสียงเครื่องยนต์ผิดจังหวะกับเสียงน้ำกระทบลำเรือที่ดังขึ้น มาตรวัดความลึกกระตุก แผงแสดงว่าระบบถ่วงน้ำหนักมีข้อผิดพลาด ประตูกั้นห้องเครื่องยังปิดสนิท ไฟฉุกเฉินสีแดงสาดพื้น ไม่มีเสียงตอบจากกะลาสีคนอื่นตามช่องภายใน เราต้องไม่ให้เรือจมลงสู่ความลึกที่กู้ไม่ทัน และต้องเริ่มขั้นตอนขึ้นผิวฉุกเฉินให้สำเร็จจริง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_submarine_crush_depth_breached": "no",
+        "goal_emergency_blow_surface_sequence_complete": "no",
+        "sub_alarm_audible": "yes_hull_stress",
+        "sub_ballast_status": "fault_reported",
+        "sub_bridge_intercom": "no_reply_from_other_compartments",
+        "sub_depth_gauge": "oscillating",
+        "sub_engine_note": "irregular",
+        "sub_engine_room_door": "closed_sealed",
+        "sub_emergency_lights": "on_red"
+      }
+    },
+    {
+      "themes": ["สยองขวัญ", "ลึกลับ", "เมือง"],
+      "situation": "เราอยู่ในตึกเก่าที่ปิดซ่อม บันไดไม้ดังเอี๊ยดเมื่อเราเคลื่อนที่ หน้าต่างบานใหญ่ปิดแต่กระจกแตกเป็นรอยยาว ลมจากช่องรั่วทำให้ผ้าม่านไหว บนกำแพงมีวงเวทย์วาดด้วยชอล์กยังไม่ถูกลบ ประตูทางออกหลักเปิดค้างเล็กน้อยแต่ด้านนอกมืดจนมองไม่เห็นทาง ได้ยินเสียงกระซิบจากชั้นบนแต่ไม่เห็นคน เราต้องไม่ให้พิธีในวงนั้นถูกปิดจบจนมีอะไรเข้ามาอยู่ในตัวเราได้ และต้องออกจากอาคารนี้พร้อมล็อกประตูหลักให้แน่นก่อนเที่ยงคืน",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_entity_invited_or_bound_to_protagonist": "no",
+        "goal_exit_building_main_door_sealed_behind": "no",
+        "bldg_chalk_circle_on_wall": "intact_unbroken",
+        "bldg_front_door": "ajar_slightly",
+        "bldg_upper_floor_sounds": "whispers_audible",
+        "bldg_window_glass": "cracked_not_fallen",
+        "bldg_interior_light": "dim_from_street_only",
+        "bldg_clock_visible": "before_midnight"
+      }
+    },
+    {
+      "themes": ["ลึกลับ", "เมือง", "ละคร"],
+      "situation": "เราเป็นนักข่าวอิสระ นัดสัมภาษณ์แหล่งข่าวในห้องโถงโรงแรมเก่า โต๊ะสองฝั่ง แฟ้มเอกสารวางกลางยังไม่ถูกเปิด กล้องบันทึกเสียงของเราวางอยู่แต่ยังไม่กดอัด ทางเดินด้านนอกมีแขกผ่านไปมาเบา ๆ ประตูห้องปิด มีเสียงเคาะหนึ่งครั้งแล้วเงียบ เราต้องไม่ให้หลักฐานในแฟ้มถูกทำลายหรือหายไปก่อนส่งมอบ และต้องส่งชุดหลักฐานไปยังบรรณาธิการให้ได้รับยืนยันว่ารับแล้ว",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_key_evidence_destroyed_or_taken": "no",
+        "goal_evidence_handoff_confirmed_by_editor": "no",
+        "hotel_room_door": "closed",
+        "hotel_corridor_foot_traffic": "light_audible",
+        "hotel_dossier_folder": "sealed_on_table",
+        "hotel_recorder": "armed_not_recording",
+        "hotel_knock_at_door": "single_then_silence"
+      }
+    },
+    {
+      "themes": ["แฟนตาซี", "ลึกลับ", "ผจญภัย"],
+      "situation": "เราอยู่ในห้องใต้ดินของวิหาร แท่นหินกลางห้องมีคริสตัลคุมพลังเรืองแสงสีฟ้าอ่อน วงอักขระบนพื้นยังสว่างไม่เต็มเส้น ชั้นวางหนังสือโบราณเปิดค้างที่หน้าพิธีกรรม ประตูเหล็กหนาที่ขึ้นห้องบนปิดและมีกุญแจเสียบอยู่ ได้ยินเสียงคล้ายกรงเล็บขูดจากอีกฟากของประตู เราต้องไม่ให้ผนึกแตกจนสิ่งข้างนอกเข้ามาได้ และต้องทำพิธีผนึกให้เสร็จสมบูรณ์ตามตำรา",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_seal_shattered_entity_entered": "no",
+        "goal_binding_ritual_completed_per_tome": "no",
+        "temple_basement_crystal_pedestal": "glowing_dim",
+        "temple_floor_sigils": "incomplete_glowing_lines",
+        "temple_iron_door_to_upper": "locked_key_in_lock",
+        "temple_grimoire": "open_on_lectern",
+        "temple_beyond_door_sounds": "scraping_claws"
+      }
+    },
+    {
+      "themes": ["ดิ้นรน", "กู้ภัย", "เมือง"],
+      "situation": "ไฟป่าใกล้หมู่บ้านลามเร็ว เราอยู่ศูนย์พักพิงชั่วคราว ท้องฟ้าเหลืองคลุ้งควัน อาสาสมัครวิ่งส่งถังน้ำ วิทยุสื่อสารฉุกเฉินวางบนโต๊ะยังไม่มีเสียงตอบจากหน่วยบิน แผนที่บนกระดานแสดงเส้นไฟขยับใกล้เส้นป้องกันสุดท้าย ประตูศูนย์ยังปิด เราต้องไม่ให้ไฟทะลุเส้นป้องกันจนถึงตัวอาคารศูนย์ และต้องให้มีการยืนยันจากฮ.กู้ภัยว่ากำลังมุ่งหน้ามาที่นี่จริง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_fire_line_breached_shelter_building": "no",
+        "goal_air_rescue_inbound_confirmed_by_radio": "no",
+        "shelter_doors": "closed",
+        "shelter_radio_handset": "no_ack_yet",
+        "shelter_map_fire_front": "near_final_line",
+        "shelter_sky_visible": "smoke_orange_haze",
+        "shelter_volunteer_activity": "busy_water_buckets"
+      }
+    },
+    {
+      "themes": ["ตลก", "ละคร", "เมือง"],
+      "situation": "เราเป็นเพื่อนเจ้าสาวที่ถือกล่องแหวน งานแต่งกลางสวนกำลังจะเริ่ม แขกนั่งรอ นักดนตรีจูนเครื่อง แล้วลมแรงพัดหมวกคนหนึ่งไปโดนโต๊ะเค้ก กล่องแหวนในมือเรายังปิดสนิท แต่ฝาหลวม แหวนยังอยู่ข้างในเมื่อกี้ แต่ตอนนี้เห็นแค่ฟองน้ำ มีแมวส้มเดินผ่านไปทางพุ่มไม้หลังเวที เราต้องไม่ให้งานแตกเป็นเพราะแหวนหายไปจริง ๆ และต้องส่งแหวนคืนมือเจ้าสาวก่อนพิธีสาบาน",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_wedding_rings_lost_irrecoverable": "no",
+        "goal_rings_in_brides_hand_before_vows": "no",
+        "wedding_ring_box": "open_empty_foam_only",
+        "wedding_stage_area": "musicians_tuning",
+        "wedding_guests_seated": "yes_waiting",
+        "wedding_orange_cat": "seen_near_hedge",
+        "wedding_wind": "strong_gusts"
+      }
+    },
+    {
+      "themes": ["กู้ภัย", "ดิ้นรน", "ระทึก"],
+      "situation": "เราอยู่ทางเข้าอุโมงค์เหมืองที่ถล่ม ฝุ่นยังลอยในไฟฉาย ได้ยินเสียงตะโกนจากด้านในแผ่ว ๆ แต่ไม่ชัดคำ แท่นค้ำชั่วคราวยังไม่ติดตั้งครบ รถบรรทุกทรายจอดขวางทางแคบ หัวหน้าทีมยังไม่สัญญาณว่าปลอดภัยที่จะเข้าไปลึกกว่านี้ เราต้องไม่ให้ซากถล่มซ้ำจนผู้ติดข้างในไม่มีทางออก และต้องให้โครงค้ำชั่วคราวติดตั้งเสร็จและได้รับการยืนยันว่ารับน้ำหนักได้",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_tunnel_secondary_collapse_buries_survivors": "no",
+        "goal_temporary_shoring_verified_safe_by_lead": "no",
+        "mine_tunnel_entrance": "partially_blocked_rubble",
+        "mine_voices_from_depth": "faint_shouts",
+        "mine_shoring_frames": "not_all_placed",
+        "mine_sand_truck": "blocking_narrow_path",
+        "mine_dust_air": "thick_in_beam"
+      }
+    },
+    {
+      "themes": ["อาชญากรรม", "เมือง", "ละคร"],
+      "situation": "เราเป็นเจ้าหน้าที่ที่ถูกเรียกเข้าไปในห้องประชุมชั้นสูง ตัวประกันสามคนนั่งเก้าอี้หลังแถวเดียวกัน คนร้ายยืนข้างหน้าต่างกระจกบานใหญ่ มือถืออุปกรณ์คล้ายตัวจุดระเบิด โทรศัพท์บนโต๊ะประชุมยังไม่มีสายจากหน่วยเจรจา ลิฟต์โดยสารแสดงว่าหยุดที่ชั้นล่าง ทางบันไดหนีไฟปิดจากภายนอก เราต้องไม่ให้มีผู้เสียชีวิตในตัวประกัน และต้องเปิดช่องเจรจากับหน่วยเจรจาอย่างเป็นทางการให้สำเร็จ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_hostage_killed": "no",
+        "goal_negotiation_channel_live_with_unit": "no",
+        "office_hostile_demeanor": "threatening",
+        "office_hostile_visible_device": "deadman_style_grip",
+        "office_hostages_count": "three_visible",
+        "office_negotiation_phone": "silent_no_incoming",
+        "office_elevator_status": "stopped_ground_floor",
+        "office_stair_exit": "blocked_from_outside"
+      }
+    },
+    {
+      "themes": ["ไซไฟ", "สยองขวัญ", "ระทึก"],
+      "situation": "เราอยู่ห้องปลอดเชื้อชั้นล่างของห้องแล็บ ไฟสีขาวจ้า แผงแสดงว่าห้องปลอดเชื้อด้านในกำลังรั่วความดันลบเล็กน้อย สัญญาณไซเรนภายในอาคารยังไม่ดัง ชุดป้องกันเต็มใบแขวนอยู่แต่ยังไม่สวม ประตูล็อกสองชั้นไปทางโถงยังปิด หน้าจอระบบแจ้งว่าการล็อกดาวน์โซนรอการยืนยันจากหัวหน้า เราต้องไม่ให้เชื้อรุดลามออกนอกโซนที่กำหนด และต้องให้การล็อกดาวน์ห้องแล็บเสร็จสมบูรณ์ตามขั้นตอน",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_biohazard_zone_breach_spread": "no",
+        "goal_lab_zone_lockdown_complete": "no",
+        "lab_inner_chamber_pressure": "slight_negative_leak_indicator",
+        "lab_suit_rack": "full_suits_available",
+        "lab_building_siren": "off",
+        "lab_double_doors_to_corridor": "closed_locked",
+        "lab_lockdown_console": "awaiting_supervisor_confirm"
+      }
+    },
+    {
+      "themes": ["ผจญภัย", "แฟนตาซี", "ระทึก"],
+      "situation": "เราอยู่กลางสะพานหินโบราณเหนือเหวลึก หมอกปกคลุมจนมองไม่เห็นก้นหลุม หินบางก้อนแตกร้าวใต้เท้า ฝั่งที่เรามายังมีเชือกและเสาเหล็กยึดอยู่ อีกฝั่งมีเพื่อนร่วมทางสองคนยือรออยู่ห่างจากขอบ กล่องที่บรรจุวัตถุศักดิ์สิทธิ์วางอยู่ใกล้เรา ยังไม่ข้ามไปฝั่งนั้น เราต้องไม่ให้วัตถุตกลงเหวหรือหายไปก่อนถึงวัด และต้องให้ทุกคนที่ยังอยู่บนสะพานข้ามไปฝั่งปลอดภัยได้",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_relic_lost_into_chasm": "no",
+        "goal_all_on_bridge_reached_safe_side": "no",
+        "bridge_fog": "thick_no_floor_visible",
+        "bridge_stones_underfoot": "cracked_some_loose",
+        "bridge_relic_container": "on_near_side",
+        "bridge_companions_far_side": "two_waiting",
+        "bridge_anchor_rope": "tied_near_tower"
+      }
+    },
+    {
+      "themes": ["ลึกลับ", "สยองขวัญ", "เรือดำน้ำ"],
+      "situation": "เราตื่นขึ้นมาในห้องเครื่องยนต์ใต้ทะเลลึก นาฬิกาบนผนังหยุดเดิน ไฟฟ้าส่องเป็นจังหวะ ท่อไอน้ำร้อนแต่ไม่มีคนคุม ประตูห้องเครื่องล็อกจากด้านนอก เสียงเคาะจังหวะสม่ำเสมอดังจากท่อระบาย แผงควบคุมแสดงว่าเรือยังไม่ขึ้นผิวและไม่มีสัญญาณ GPS เราต้องไม่ให้ความดันน้ำทำลายลำจนห้องน้ำเข้าเต็มก่อนถึงผิว และต้องเปิดการเชื่อมต่อกับสะพานบังคับหรือสัญญาณพื้นฐานให้ได้รับการตอบรับ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_pressure_hull_failure_flooding_fatal": "no",
+        "goal_bridge_comms_link_established": "no",
+        "engine_room_door": "locked_from_outside",
+        "engine_room_clock": "stopped",
+        "engine_room_steam_vents": "hissing_rhythm",
+        "engine_room_depth_readout": "deep_no_surface",
+        "engine_room_lighting": "flickering"
+      }
+    },
+    {
+      "themes": ["ไซไฟ", "เมือง", "อาชญากรรม"],
+      "situation": "เราขับแท็กซี่ไร้คนขับในเมืองยามค่ำ ระบบนำทางเด้งเส้นทางใหม่ทุกสิบวินาที กระจกมองหลังเห็นถุงในรถหลังมีไฟกระพริบเล็ก ๆ คล้ายอุปกรณ์ติดตาม ด้านนอกมีโดรนตำรวจบินผ่านแต่ยังไม่จอดส่องคันเรา ประตูล็อกอัตโนมัติยังทำงาน เราต้องไม่ให้แพ็กเกจในรถถูกส่งถึงมือผู้รับที่ระบุในแอปก่อนมีการตรวจสอบจากเจ้าหน้าที่ และต้องให้มีการยืนยันจากตำรวจว่ารับเรื่องและกำลังสกัดจุดส่ง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_package_delivered_to_recipient_before_clearance": "no",
+        "goal_police_intercept_confirmed_for_drop": "no",
+        "taxi_nav_status": "rerouting_repeatedly",
+        "taxi_rear_bag_blink": "visible_slow_blink",
+        "taxi_doors": "locked_auto",
+        "taxi_police_drone": "passed_overhead_not_hailing"
+      }
+    },
+    {
+      "themes": ["แฟนตาซี", "ตลก", "ผจญภัย"],
+      "situation": "เราเป็นนักเล่นแร่แปรธาตุที่สอบไม่ผ่านรอบสุดท้าย ในห้องสอบมีโถใส่ของเหลวสีเขียวเดือด อาจารย์ยืนข้างโต๊ะยิ้มแห้ง ๆ สูตรบนกระดานดูผิดตัวเลขหนึ่งจุด นักเรียนคนอื่นก้มหน้าคนละอาการ เราต้องไม่ให้ห้องระเบิดหรือของเหลวกระเซ็นใส่คนอื่นจนเจ็บหนัก และต้องทำให้การทดลองครั้งนี้ผ่านเกณฑ์ขั้นต่ำตามที่อาจารย์ประกาศไว้",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_exam_catastrophe_class_injured": "no",
+        "goal_exam_minimum_pass_mark_achieved": "no",
+        "exam_cauldron": "boiling_green",
+        "exam_formula_on_board": "one_digit_suspect",
+        "exam_instructor_demeanor": "dry_smile",
+        "exam_other_students": "heads_down_varied"
+      }
     }
   ]
 }
