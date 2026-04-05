@@ -27,4 +27,20 @@ export type Room = {
   situation?: string;
   /** Selected scenario theme in lobby; broadcast to all players in real time */
   lobbyTheme: string;
+  /** During `playing`: socket ids that pressed skip-to-vote (unanimous → phase voting). */
+  skipToVotePlayerIds: string[];
+  /** During `voting`: voter socket id → accused player id (one vote per voter). */
+  votes: Record<string, string>;
+  /** After a tied vote: counts and who tied; votes cleared for a new round. */
+  voteTieInfo?: {
+    tallies: { playerId: string; count: number }[];
+    tiedPlayerIds: string[];
+  };
+  /** Set when voting resolves (single top vote vs imposter). */
+  voteOutcome?: {
+    accusedId: string;
+    imposterId: string;
+    crewWon: boolean;
+    tally: { playerId: string; count: number }[];
+  };
 };

@@ -48,10 +48,18 @@ function getOrCreateMainRoom(): Room {
       phase: "lobby",
       worldState: {},
       lobbyTheme: defaultLobbyTheme(),
+      skipToVotePlayerIds: [],
+      votes: {},
     };
     rooms.set(MAIN_ROOM_ID, room);
   } else if (typeof room.lobbyTheme !== "string") {
     room.lobbyTheme = defaultLobbyTheme();
+  }
+  if (!Array.isArray(room.skipToVotePlayerIds)) {
+    room.skipToVotePlayerIds = [];
+  }
+  if (!room.votes || typeof room.votes !== "object") {
+    room.votes = {};
   }
   return room;
 }
@@ -72,9 +80,11 @@ function getRoomState(room: Room, viewerSocketId?: string) {
       role:
         room.phase === "lobby"
           ? undefined
-          : viewerSocketId && p.id === viewerSocketId
+          : room.phase === "end" && room.voteOutcome
             ? p.role
-            : undefined,
+            : viewerSocketId && p.id === viewerSocketId
+              ? p.role
+              : undefined,
     })),
     logs: room.logs,
     currentTurn: room.currentTurn,
@@ -83,6 +93,15 @@ function getRoomState(room: Room, viewerSocketId?: string) {
     worldState: room.worldState,
     situation: room.situation,
     lobbyTheme: room.lobbyTheme,
+    skipToVotePlayerIds: [...(room.skipToVotePlayerIds ?? [])],
+    votes: { ...(room.votes ?? {}) },
+    voteOutcome: room.voteOutcome,
+    voteTieInfo: room.voteTieInfo
+      ? {
+          tallies: room.voteTieInfo.tallies.map((t) => ({ ...t })),
+          tiedPlayerIds: [...room.voteTieInfo.tiedPlayerIds],
+        }
+      : undefined,
   };
 }
 
@@ -218,6 +237,10 @@ io.on("connection", (socket) => {
     room.roundIndex = 0;
     room.worldState = { ...defaultSystemWorldState(), ...worldState };
     room.situation = situation;
+    room.skipToVotePlayerIds = [];
+    room.votes = {};
+    room.voteOutcome = undefined;
+    room.voteTieInfo = undefined;
 
     emitRoomUpdate(io, room);
     io.to(room.id).emit("phase_change", "playing");
@@ -345,6 +368,45 @@ io.on("connection", (socket) => {
     }
   });
 
+  function pruneSkipToVote(room: Room) {
+    const inRoom = new Set(room.players.map((p) => p.id));
+    room.skipToVotePlayerIds = room.skipToVotePlayerIds.filter((id) =>
+      inRoom.has(id)
+    );
+  }
+
+  function tryEnterVotingFromSkip(io: Server, room: Room) {
+    pruneSkipToVote(room);
+    const voted = new Set(room.skipToVotePlayerIds);
+    if (
+      room.players.length > 0 &&
+      voted.size === room.players.length &&
+      room.players.every((p) => voted.has(p.id))
+    ) {
+      room.phase = "voting";
+      room.skipToVotePlayerIds = [];
+      room.votes = {};
+      room.voteTieInfo = undefined;
+      io.to(room.id).emit("phase_change", "voting");
+      io.to(room.id).emit("turn_change", null);
+      emitRoomUpdate(io, room);
+    }
+  }
+
+  socket.on("ack_skip_to_vote", () => {
+    const room = getRoomForSocket(socket.id);
+    if (!room || room.phase !== "playing") return;
+
+    const inRoom = room.players.some((p) => p.id === socket.id);
+    if (!inRoom) return;
+
+    const voted = new Set(room.skipToVotePlayerIds);
+    voted.add(socket.id);
+    room.skipToVotePlayerIds = [...voted];
+    tryEnterVotingFromSkip(io, room);
+    if (room.phase === "playing") emitRoomUpdate(io, room);
+  });
+
   socket.on("player_typing", (payload: { typing?: boolean }) => {
     const room = getRoomForSocket(socket.id);
     if (!room || room.phase !== "playing") return;
@@ -356,23 +418,124 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("vote", (payload: { targetId: string }) => {
-    const { targetId } = payload;
+  function resolveVotingIfComplete(io: Server, room: Room): boolean {
+    if (room.phase !== "voting") return false;
+    const playerIds = new Set(room.players.map((p) => p.id));
+    const allVoted =
+      room.players.length > 0 &&
+      room.players.every((p) => {
+        const t = room.votes[p.id];
+        return typeof t === "string" && playerIds.has(t);
+      });
+    if (!allVoted) return false;
+
+    const tally = new Map<string, number>();
+    for (const p of room.players) {
+      const t = room.votes[p.id];
+      if (!t || !playerIds.has(t)) continue;
+      tally.set(t, (tally.get(t) ?? 0) + 1);
+    }
+
+    let max = -1;
+    for (const p of room.players) {
+      const c = tally.get(p.id) ?? 0;
+      if (c > max) max = c;
+    }
+    const tied = room.players.filter((p) => (tally.get(p.id) ?? 0) === max);
+
+    const talliesSorted = [...room.players]
+      .map((p) => ({ playerId: p.id, count: tally.get(p.id) ?? 0 }))
+      .sort((a, b) => b.count - a.count);
+
+    if (tied.length > 1) {
+      room.voteTieInfo = {
+        tallies: talliesSorted,
+        tiedPlayerIds: tied.map((p) => p.id),
+      };
+      room.votes = {};
+      emitRoomUpdate(io, room);
+      return false;
+    }
+
+    const accusedId = tied[0]?.id ?? room.players[0]?.id ?? "";
+    const imposter = room.players.find((p) => p.role === "imposter");
+    const imposterId = imposter?.id ?? "";
+    const crewWon = Boolean(imposterId && accusedId === imposterId);
+
+    room.voteTieInfo = undefined;
+    room.voteOutcome = {
+      accusedId,
+      imposterId,
+      crewWon,
+      tally: talliesSorted,
+    };
+    room.phase = "end";
+    room.votes = {};
+    io.to(room.id).emit("phase_change", "end");
+    io.to(room.id).emit("turn_change", null);
+    emitRoomUpdate(io, room);
+    return true;
+  }
+
+  function resetMainRoomToLobby(io: Server) {
+    const room = rooms.get(MAIN_ROOM_ID);
+    if (!room) return;
+    room.players = [];
+    room.logs = [];
+    room.currentTurn = 0;
+    room.roundIndex = 0;
+    room.phase = "lobby";
+    room.worldState = {};
+    delete room.situation;
+    room.lobbyTheme = defaultLobbyTheme();
+    room.skipToVotePlayerIds = [];
+    room.votes = {};
+    room.voteOutcome = undefined;
+    room.voteTieInfo = undefined;
+    io.to(MAIN_ROOM_ID).emit("session_cleared");
+  }
+
+  socket.on("reset_game", () => {
+    const room = getRoomForSocket(socket.id);
+    if (!room || room.id !== MAIN_ROOM_ID) return;
+    if (!["playing", "voting", "end"].includes(room.phase)) return;
+    resetMainRoomToLobby(io);
+  });
+
+  socket.on("vote", (payload: { targetId?: string }) => {
+    const targetId = payload?.targetId?.trim() ?? "";
     if (!targetId) return;
 
     const room = getRoomForSocket(socket.id);
-    if (!room) return;
-    if (room.phase !== "voting") return;
+    if (!room || room.phase !== "voting") return;
 
-    // TODO: implement voting logic (collect votes, determine result)
+    const voterId = socket.id;
+    if (!room.players.some((p) => p.id === voterId)) return;
+    if (!room.players.some((p) => p.id === targetId)) return;
+    if (room.votes[voterId]) return;
+
+    room.votes[voterId] = targetId;
+    if (resolveVotingIfComplete(io, room)) return;
     emitRoomUpdate(io, room);
   });
 
   socket.on("disconnect", () => {
     const room = getRoomForSocket(socket.id);
     if (room) {
+      if (room.phase === "voting") {
+        room.votes = {};
+        room.voteTieInfo = undefined;
+      }
       room.players = room.players.filter((p) => p.id !== socket.id);
-      emitRoomUpdate(io, room);
+      if (room.phase === "playing") {
+        pruneSkipToVote(room);
+        tryEnterVotingFromSkip(io, room);
+        if (room.phase === "playing") emitRoomUpdate(io, room);
+      } else if (room.phase === "voting") {
+        emitRoomUpdate(io, room);
+      } else {
+        emitRoomUpdate(io, room);
+      }
     }
   });
 });
