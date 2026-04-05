@@ -1,12 +1,9 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 import type { Room, Player, RoomLog } from "../lib/types";
-import {
-  askAI,
-  buildAftermathPrompt,
-  buildGameMasterPrompt,
-  parseActionResponse,
-} from "../lib/ollama";
+import { MAX_PLAYER_ACTION_LENGTH } from "../lib/game-limits";
+import { formatLogsForGmPrompt } from "../lib/gm-log-format";
+import { runThreeLayerAftermathStep, runThreeLayerPlayerTurn } from "../lib/ollama";
 import {
   getThemeLabelsFromScenarioPool,
   pickRandomScenarioFromPool,
@@ -15,6 +12,7 @@ import {
   SYSTEM_LOG_PLAYER_ID,
   defaultSystemWorldState,
   isMissionWon,
+  isRuleFailed,
   isSystemProtagonistDead,
   isSystemProtagonistPlayable,
 } from "../lib/world-state";
@@ -33,6 +31,11 @@ if (!global.__rooms) {
 const MAIN_ROOM_ID = "MAIN";
 const GAME_PASSCODE = process.env.GAME_PASSCODE ?? "JourneyToJupiter";
 
+function defaultLobbyTheme(): string {
+  const labels = getThemeLabelsFromScenarioPool();
+  return labels[0] ?? "";
+}
+
 function getOrCreateMainRoom(): Room {
   let room = rooms.get(MAIN_ROOM_ID);
   if (!room) {
@@ -43,10 +46,12 @@ function getOrCreateMainRoom(): Room {
       currentTurn: 0,
       roundIndex: 0,
       phase: "lobby",
-      missionProgress: 0,
       worldState: {},
+      lobbyTheme: defaultLobbyTheme(),
     };
     rooms.set(MAIN_ROOM_ID, room);
+  } else if (typeof room.lobbyTheme !== "string") {
+    room.lobbyTheme = defaultLobbyTheme();
   }
   return room;
 }
@@ -58,22 +63,33 @@ function getRoomForSocket(socketId: string): Room | null {
   return null;
 }
 
-function getRoomState(room: Room) {
+function getRoomState(room: Room, viewerSocketId?: string) {
   return {
     id: room.id,
     players: room.players.map((p) => ({
       id: p.id,
       name: p.name,
-      role: room.phase === "lobby" ? undefined : p.role,
+      role:
+        room.phase === "lobby"
+          ? undefined
+          : viewerSocketId && p.id === viewerSocketId
+            ? p.role
+            : undefined,
     })),
     logs: room.logs,
     currentTurn: room.currentTurn,
     roundIndex: room.roundIndex ?? 0,
     phase: room.phase,
-    missionProgress: room.missionProgress,
     worldState: room.worldState,
     situation: room.situation,
+    lobbyTheme: room.lobbyTheme,
   };
+}
+
+function emitRoomUpdate(io: Server, room: Room) {
+  for (const p of room.players) {
+    io.to(p.id).emit("room_update", getRoomState(room, p.id));
+  }
 }
 
 const AFTERMATH_MAX_STEPS = 8;
@@ -84,27 +100,18 @@ async function runAftermathNarration(
   situation: string
 ): Promise<void> {
   for (let step = 0; step < AFTERMATH_MAX_STEPS; step++) {
-    if (isMissionWon(room.worldState, room.missionProgress)) return;
+    if (isRuleFailed(room.worldState) || isMissionWon(room.worldState)) return;
 
-    const recentEvents = room.logs.slice(-5).map((l) => {
-      const suggestedAction = l.action.includes(": ")
-        ? l.action.split(": ").slice(1).join(": ").trim()
-        : l.action;
-      return `${suggestedAction}${l.narrative ? ` → ${l.narrative}` : ""}`;
-    });
+    const recentEvents = formatLogsForGmPrompt(room.logs);
 
-    let raw: string;
-    try {
-      raw = await askAI(
-        buildAftermathPrompt(situation, recentEvents, room.worldState, room.missionProgress)
-      );
-    } catch {
-      raw = `[เหตุการณ์ดำเนินต่อ — ระบบ AI ไม่พร้อม]`;
-    }
-
-    const { narrative, progressDelta, stateUpdates, missionPossible } = parseActionResponse(raw);
-    Object.assign(room.worldState, stateUpdates);
-    room.missionProgress = Math.min(100, room.missionProgress + progressDelta);
+    const { narrative, missionPossible, sceneUpdates, outcomeUpdates } =
+      await runThreeLayerAftermathStep({
+        situation,
+        recentEvents,
+        worldState: room.worldState,
+      });
+    Object.assign(room.worldState, sceneUpdates);
+    Object.assign(room.worldState, outcomeUpdates);
 
     const aftermathLog: RoomLog = {
       playerId: SYSTEM_LOG_PLAYER_ID,
@@ -113,10 +120,14 @@ async function runAftermathNarration(
     };
     room.logs.push(aftermathLog);
     io.to(room.id).emit("new_log", [aftermathLog]);
-    io.to(room.id).emit("room_update", getRoomState(room));
+    emitRoomUpdate(io, room);
     io.to(room.id).emit("turn_change", null);
 
-    if (isMissionWon(room.worldState, room.missionProgress) || !missionPossible) {
+    if (
+      isRuleFailed(room.worldState) ||
+      isMissionWon(room.worldState) ||
+      !missionPossible
+    ) {
       return;
     }
   }
@@ -152,8 +163,22 @@ io.on("connection", (socket) => {
     room.players.push(player);
     socket.join(MAIN_ROOM_ID);
 
-    const state = getRoomState(room);
-    io.to(MAIN_ROOM_ID).emit("room_update", state);
+    emitRoomUpdate(io, room);
+  });
+
+  socket.on("set_lobby_theme", (payload: { theme?: string }) => {
+    const room = getRoomForSocket(socket.id);
+    if (!room || room.phase !== "lobby") return;
+
+    const theme = payload?.theme?.trim() ?? "";
+    const allowedThemes = new Set(getThemeLabelsFromScenarioPool());
+    if (!theme || !allowedThemes.has(theme)) {
+      socket.emit("error", { message: "Pick a theme from the list" });
+      return;
+    }
+
+    room.lobbyTheme = theme;
+    emitRoomUpdate(io, room);
   });
 
   socket.on("start_game", (payload: { theme?: string }) => {
@@ -165,16 +190,20 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const theme = payload?.theme?.trim() ?? "";
     const allowedThemes = new Set(getThemeLabelsFromScenarioPool());
+    const themeFromPayload = payload?.theme?.trim();
+    const theme =
+      themeFromPayload && allowedThemes.has(themeFromPayload)
+        ? themeFromPayload
+        : room.lobbyTheme?.trim() ?? "";
     if (!theme || !allowedThemes.has(theme)) {
-      socket.emit("error", { message: "เลือกธีมจากรายการที่มีในเกม" });
+      socket.emit("error", { message: "Pick a theme from the list" });
       return;
     }
 
     const fromPool = pickRandomScenarioFromPool(theme);
     if (!fromPool) {
-      socket.emit("error", { message: "ไม่มีสถานการณ์สำหรับธีมนี้" });
+      socket.emit("error", { message: "No scenario available for this theme" });
       return;
     }
 
@@ -187,19 +216,23 @@ io.on("connection", (socket) => {
     room.phase = "playing";
     room.currentTurn = 0;
     room.roundIndex = 0;
-    room.missionProgress = 0;
     room.worldState = { ...defaultSystemWorldState(), ...worldState };
     room.situation = situation;
 
-    const state = getRoomState(room);
-    io.to(room.id).emit("room_update", state);
+    emitRoomUpdate(io, room);
     io.to(room.id).emit("phase_change", "playing");
     io.to(room.id).emit("turn_change", room.players[0]?.id ?? null);
   });
 
   socket.on("action", async (payload: { action: string }) => {
-    const { action } = payload;
+    const action = payload?.action?.trim() ?? "";
     if (!action) return;
+    if (action.length > MAX_PLAYER_ACTION_LENGTH) {
+      socket.emit("error", {
+        message: `Action exceeds ${MAX_PLAYER_ACTION_LENGTH} characters`,
+      });
+      return;
+    }
 
     const room = getRoomForSocket(socket.id);
     if (!room) {
@@ -213,7 +246,7 @@ io.on("connection", (socket) => {
 
     if (!isSystemProtagonistPlayable(room.worldState)) {
       socket.emit("error", {
-        message: "ตัวละครหลักเล่นไม่ได้แล้ว — รอให้เรื่องดำเนินต่อ (ระบบ)",
+        message: "Protagonist cannot act — wait for the story to continue",
       });
       return;
     }
@@ -224,33 +257,43 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const recentActions = room.logs.slice(-5).map((l) => {
-      const suggestedAction = l.action.includes(": ") ? l.action.split(": ").slice(1).join(": ").trim() : l.action;
-      return `${suggestedAction}${l.narrative ? ` → ${l.narrative}` : ""}`;
-    });
+    const recentActions = formatLogsForGmPrompt(room.logs);
     const situation =
       room.situation ??
       "A collaborative story. One shared protagonist. One imposter among the players.";
 
-    const prompt = buildGameMasterPrompt(
-      situation,
-      recentActions,
-      action,
-      room.worldState,
-      room.missionProgress
-    );
-
-    let rawNarrative: string;
+    io.to(room.id).emit("action_pending", {
+      playerId: socket.id,
+      actionLine: `${currentPlayer.name}: ${action}`,
+    });
+    io.to(room.id).emit("gm_thinking", { active: true });
+    let narrative: string;
+    let missionPossible: boolean;
+    let sceneUpdates: Record<string, string | number | boolean>;
+    let outcomeUpdates: Record<string, string | number | boolean>;
     try {
-      rawNarrative = await askAI(prompt);
+      const result = await runThreeLayerPlayerTurn({
+        situation,
+        recentActions,
+        playerAction: action,
+        worldState: room.worldState,
+      }).finally(() => {
+        io.to(room.id).emit("gm_thinking", { active: false });
+      });
+      narrative = result.narrative;
+      missionPossible = result.missionPossible;
+      sceneUpdates = result.sceneUpdates;
+      outcomeUpdates = result.outcomeUpdates;
     } catch (err) {
-      rawNarrative = `[The room trembles. Something goes wrong. Perhaps the AI is offline.]`;
+      console.error("runThreeLayerPlayerTurn", err);
+      io.to(room.id).emit("beat_aborted");
+      socket.emit("error", {
+        message: "The narrator failed to respond. Try again.",
+      });
+      return;
     }
-
-    const { narrative, progressDelta, stateUpdates, missionPossible } =
-      parseActionResponse(rawNarrative);
-    Object.assign(room.worldState, stateUpdates);
-    room.missionProgress = Math.min(100, room.missionProgress + progressDelta);
+    Object.assign(room.worldState, sceneUpdates);
+    Object.assign(room.worldState, outcomeUpdates);
 
     const protagonistUnplayable = isSystemProtagonistDead(room.worldState);
     const missionImpossible = !missionPossible;
@@ -273,9 +316,13 @@ io.on("connection", (socket) => {
     const allTurnsUsed = (room.roundIndex ?? 0) >= 3;
 
     io.to(room.id).emit("new_log", [log]);
-    io.to(room.id).emit("room_update", getRoomState(room));
+    emitRoomUpdate(io, room);
 
-    if (isMissionWon(room.worldState, room.missionProgress)) {
+    if (isRuleFailed(room.worldState)) {
+      room.phase = "end";
+      io.to(room.id).emit("phase_change", "end");
+      io.to(room.id).emit("turn_change", null);
+    } else if (isMissionWon(room.worldState)) {
       room.phase = "end";
       io.to(room.id).emit("phase_change", "end");
       io.to(room.id).emit("turn_change", null);
@@ -287,7 +334,7 @@ io.on("connection", (socket) => {
       io.to(room.id).emit("turn_change", null);
       await runAftermathNarration(io, room, situation);
       room.phase = "end";
-      io.to(room.id).emit("room_update", getRoomState(room));
+      emitRoomUpdate(io, room);
       io.to(room.id).emit("phase_change", "end");
     } else if (allTurnsUsed) {
       room.phase = "end";
@@ -296,6 +343,17 @@ io.on("connection", (socket) => {
     } else {
       io.to(room.id).emit("turn_change", nextPlayer?.id ?? null);
     }
+  });
+
+  socket.on("player_typing", (payload: { typing?: boolean }) => {
+    const room = getRoomForSocket(socket.id);
+    if (!room || room.phase !== "playing") return;
+    const player = room.players.find((p) => p.id === socket.id);
+    socket.to(room.id).emit("player_typing", {
+      playerId: socket.id,
+      name: player?.name ?? "Player",
+      typing: Boolean(payload?.typing),
+    });
   });
 
   socket.on("vote", (payload: { targetId: string }) => {
@@ -307,14 +365,14 @@ io.on("connection", (socket) => {
     if (room.phase !== "voting") return;
 
     // TODO: implement voting logic (collect votes, determine result)
-    io.to(room.id).emit("room_update", getRoomState(room));
+    emitRoomUpdate(io, room);
   });
 
   socket.on("disconnect", () => {
     const room = getRoomForSocket(socket.id);
     if (room) {
       room.players = room.players.filter((p) => p.id !== socket.id);
-      io.to(room.id).emit("room_update", getRoomState(room));
+      emitRoomUpdate(io, room);
     }
   });
 });

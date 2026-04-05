@@ -21,10 +21,10 @@ export type Room = {
   /** Current round (0–2). 3 rounds = 3 turns per player. */
   roundIndex: number;
   phase: "lobby" | "playing" | "voting" | "end";
-  /** Mission progress 0–100. 100 = mission passed. */
-  missionProgress: number;
   /** Environment/situation state for AI and game logic */
   worldState: WorldState;
   /** Narrative situation (generated from theme by LLM) */
   situation?: string;
+  /** Selected scenario theme in lobby; broadcast to all players in real time */
+  lobbyTheme: string;
 };

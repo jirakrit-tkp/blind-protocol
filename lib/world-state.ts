@@ -22,14 +22,42 @@ export function isSystemProtagonistDead(ws: WorldState): boolean {
   return ws[SYSTEM_PROTAGONIST_ALIVE] === "no";
 }
 
-/** เป้าหมาย “เรียกตำรวจ” ใน scenario ร้านทอง */
+/** ตัวอย่างคีย์ใน scenario ร้านทอง — ใช้อ้างอิงใน data/scenarios.json */
 export const GOAL_POLICE_SUMMONED = "goal_police_summoned" as const;
 
 /**
- * ชนะภารกิจ — รวมกรณีตำรวจมาถึงแม้ system_protagonist_alive เป็น no
+ * เมื่อ scenario ไม่ได้แยก goal_* ไว้ครบ — GM ตั้งเป็น yes เมื่อชนะตามเรื่อง (เช่น ชนะทาง rules ที่ไม่ได้ map เป็น goal)
  */
-export function isMissionWon(ws: WorldState, missionProgress: number): boolean {
-  if (missionProgress >= 100) return true;
-  if (ws[GOAL_POLICE_SUMMONED] === "yes") return true;
+export const MISSION_SUCCESS = "mission_success" as const;
+
+function isAffirmative(v: unknown): boolean {
+  return v === "yes" || v === true;
+}
+
+/**
+ * แพ้ตามกติกาเรื่อง — คีย์ `rule_*` ใด ๆ เป็น yes/true แปลว่าเหตุต้องห้ามของสถานการณ์เกิดแล้ว (ลำดับสำคัญกว่า goal)
+ * ดู docs/scenario-design.md
+ */
+export function isRuleFailed(ws: WorldState): boolean {
+  for (const [k, v] of Object.entries(ws)) {
+    if (k.startsWith("rule_") && isAffirmative(v)) return true;
+  }
   return false;
+}
+
+function hasGoalSucceeded(ws: WorldState): boolean {
+  for (const [k, v] of Object.entries(ws)) {
+    if (k.startsWith("goal_") && isAffirmative(v)) return true;
+  }
+  if (isAffirmative(ws[MISSION_SUCCESS])) return true;
+  return false;
+}
+
+/**
+ * ชนะภารกิจ — ไม่แพ้ rule และ (มี goal_* หรือ mission_success สำเร็จ)
+ * เช็ค isMissionWon ก่อนถือว่าแพ้จากความตาย / หมดรอบ ฯลฯ (docs/scenario-design.md)
+ */
+export function isMissionWon(ws: WorldState): boolean {
+  if (isRuleFailed(ws)) return false;
+  return hasGoalSucceeded(ws);
 }

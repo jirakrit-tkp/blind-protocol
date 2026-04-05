@@ -1,3 +1,10 @@
+import type { WorldState } from "./types";
+import {
+  MISSION_SUCCESS,
+  SYSTEM_PROTAGONIST_ALIVE,
+  defaultSystemWorldState,
+} from "./world-state";
+
 export async function askAI(prompt: string): Promise<string> {
   const response = await fetch("http://localhost:11434/api/generate", {
     method: "POST",
@@ -19,9 +26,6 @@ export async function askAI(prompt: string): Promise<string> {
   return data.response ?? "";
 }
 
-import type { WorldState } from "./types";
-import { SYSTEM_PROTAGONIST_ALIVE, defaultSystemWorldState } from "./world-state";
-
 /** Generate situation + initial world state from theme + optional brief */
 export async function generateGameSetup(
   theme: string,
@@ -32,7 +36,7 @@ export async function generateGameSetup(
     : "";
   const prompt = `You are a game setup generator for Blind Protocol.
 
-GAME CONTEXT: Blind Protocol is a multiplayer narrative game. All players control ONE shared protagonist ("เรา"). Players take turns suggesting what the protagonist does. One player is secretly the imposter—they may suggest harmful actions. Normal players want the mission to succeed (100% progress). You generate the starting situation and world state. Later, a different AI will narrate each action neutrally (including harmful ones).
+GAME CONTEXT: Blind Protocol is a multiplayer narrative game. All players control ONE shared protagonist ("เรา"). Players take turns suggesting what the protagonist does. One player is secretly the imposter—they may suggest harmful actions. Normal players want goals (goal_*) to succeed without triggering forbidden outcomes (rule_*). You generate the starting situation and world state. Later, a different AI will narrate each action neutrally (including harmful ones).
 
 Theme (genre/category only): "${theme}"
 ${briefPart}
@@ -89,85 +93,207 @@ Respond with ONLY valid JSON. situation must be in Thai:
   }
 }
 
-export function buildGameMasterPrompt(
+function formatWorldState(ws: WorldState): string {
+  return Object.entries(ws)
+    .map(([k, v]) => `  ${k}: ${v}`)
+    .join("\n");
+}
+
+/** Layer A — เล่าเรื่องเท่านั้น (ไม่มี state block) */
+export function buildNarratorPrompt(
   situation: string,
   recentActions: string[],
   playerAction: string,
-  worldState: WorldState,
-  missionProgress: number
+  worldState: WorldState
 ): string {
-  const worldStateStr = Object.entries(worldState)
-    .map(([k, v]) => `  ${k}: ${v}`)
-    .join("\n");
-  return `You are the game master for Blind Protocol. Respond ONLY in Thai.
+  return `You are the NARRATOR for Blind Protocol. Your ONLY job is to write story prose in Thai.
 
-GAME CONTEXT: Blind Protocol—players control one shared protagonist ("เรา"). They take turns suggesting actions. One is secretly the imposter and may suggest harmful actions. Your job: narrate what happens neutrally. Do NOT favor the mission; harmful actions happen as suggested. Mission progress 100% = success (tracked separately).
+GAME CONTEXT: All players share one protagonist ("เรา"). One player is secretly the imposter. You must not reveal who. You do NOT output game state, JSON, or [STATE_UPDATES]. You do NOT say the crew won or lost.
 
-Rules:
-- "เรา" (we) is the shared protagonist. All actions are performed by us. The story is continuous.
-- Never say success or failure explicitly. Never reveal who is the imposter.
-- Write narrative in Thai from our perspective (use เรา, เราทำ, เราพบ)
-- CRITICAL: Each suggestion is what we ACTUALLY DO. Do NOT protect the mission. Do NOT have us "realize it was wrong" and undo it. If someone suggests throwing equipment away, we throw it away—describe that. Harmful actions have real consequences. Be neutral; do not bias toward saving the mission.
-- Use and respect the world state. Imply state changes in narrative (e.g. "สลักหลุดในที่สุด").
-- End your response with:
-  1. A line: [PROGRESS:X] where X is -20 to +20. Use 0 if neutral.
-  2. [STATE_UPDATES] block: key=value (one per line), then [/STATE_UPDATES].
+Narration rules:
+- Write ONLY in Thai script for the story. No Chinese, Japanese, Korean, or English sentences. No mixed-language explanations.
+- NEVER add meta-text: do not mention character limits, prompts, instructions, "rewrite", "revise", "note that", or explain what you are doing. Never output a second draft or corrected version of the same scene.
+- One single continuous story paragraph only—no labels, no bullet points, no quoted system messages.
+- Use "เรา" (we) for the shared protagonist.
+- The crew suggested this action for the protagonist to do—narrate **our attempt** and what happens, neutrally. Do NOT erase or replace the crew’s chosen action (“undo”) to save the mission. Harmful suggestions have real consequences. **Opposing forces blocking, interrupting, or punishing that attempt is NOT undoing**—it is required when the scene says they control the space or the stakes demand resistance.
+- OPPOSITION PLAUSIBILITY (critical): Read **situation** and **world state** for **any** active opposition—not only people: hostile actors, guards, rivals, monsters, AI, cultists, nature, traps, time pressure, surveillance, social power, whatever the scene establishes. Use **whatever keys exist** (any prefix) plus the **words of the situation** to infer who or what **controls space, attention, or tools** and would **plausibly resist** our move. If such opposition is present and alert, actions that would **realistically be forbidden, interrupted, or punished** (e.g. calling for help on gear they watch, sprinting to an exit they block, triggering an alarm they control, stealing a key object under their eyes) must **not** resolve as a **clean, full success in one beat**. Show **concrete interference** appropriate to the genre: shouted order, grab, jammed device, door still locked, spell fizzles, protocol denied, environmental snag, etc. **We still attempt** what the crew typed; the **outcome** reflects pushback. Do **not** default to “opponents only watch passively while we finish the whole maneuver” unless the situation or prior beats already made that credible (distance, distraction, weakened foe, etc.).
+- REQUIRED SHAPE (critical): **Every** log entry must weave **two threads in one flowing paragraph**—(A) what **เรา** do and the immediate result; (B) **at least one full, concrete beat** where the **world or someone else** does something we can **see, hear, or feel** (movement, voice, breath, shift in threat, door, light, crowd, machine, weather, system tone, etc.). (B) must not be vague mood only—show a specific observable beat. If **any** opposition or dramatic pressure exists in the situation or state, it must **act or react in this same beat**, not stay frozen offstage.
+- WORLD + US: This is still **one player action → one log**; do not add a separate "world turn". Pack both threads into the **same** narrative block.
+- LOG LENGTH: One paragraph—aim for **2–4 short sentences**, roughly **about 220–420 Thai characters**. Do not recap the full past; only this moment. Keep the world beat; do not pad. Never comment on length in the text.
+- Never say success/failure explicitly.
+- Do NOT include brackets like [STATE_UPDATES] or any machine-readable block—story text only.
 
-State update rules (critical): Store ONLY environment state that EXISTS. NO counts, NO event flags.
-- When the shared protagonist DIES (no longer controllable by players), set system_protagonist_alive=no in STATE_UPDATES.
-- When mission becomes IMPOSSIBLE (critical equipment destroyed, no path to success), add [MISSION_IMPOSSIBLE] anywhere at the end of your response.
-- Update keys when physical state changes. ADD new keys when protagonist discovers something. Use: strings, numbers, booleans.
-
-Current world state:
-${worldStateStr || "(none)"}
-
-Mission progress: ${missionProgress}% (100% = mission passed)
+Current world state (for continuity—reflect it in the story):
+${formatWorldState(worldState) || "(none)"}
 
 Situation:
 ${situation}
 
-Recent events (protagonist's story so far):
+Recent story so far:
 ${recentActions.length > 0 ? recentActions.join("\n") : "(none yet)"}
 
-Next action the protagonist takes (suggested by crew):
+Action the protagonist takes now:
 ${playerAction}`;
 }
 
-/** หลัง system_protagonist_alive = no — ไม่มี input จากผู้เล่น; โลกดำเนินต่อ (ตำรวจ โจร ฯลฯ) */
-export function buildAftermathPrompt(
+/** Layer A — aftermath: ไม่มี action จากผู้เล่น */
+export function buildAftermathNarratorPrompt(
   situation: string,
   recentEvents: string[],
-  worldState: WorldState,
-  missionProgress: number
+  worldState: WorldState
 ): string {
-  const worldStateStr = Object.entries(worldState)
-    .map(([k, v]) => `  ${k}: ${v}`)
-    .join("\n");
-  return `You are the game master for Blind Protocol. Respond ONLY in Thai.
+  return `You are the NARRATOR for Blind Protocol. Your ONLY job is to write story prose in Thai.
 
-The shared protagonist can NO LONGER be controlled by players (system_protagonist_alive is no). There is NO player suggestion this turn—the world continues on its own (police, robbers, environment, bystanders, etc.).
+The shared protagonist can NO LONGER be controlled by players (system_protagonist_alive is no). There is NO new player suggestion—the world continues (other people, institutions, hazards, machines, environment).
 
-Rules:
-- Do NOT write as if "เรา" is still taking voluntary actions unless it is unconscious reflex or others' actions on us.
-- Narrate what happens next neutrally in Thai.
-- End with [PROGRESS:X] and [STATE_UPDATES]...[/STATE_UPDATES] like the normal game master.
-- When mission becomes IMPOSSIBLE, add [MISSION_IMPOSSIBLE].
+You do NOT output [STATE_UPDATES] or any machine-readable block. Do NOT say the crew won or lost. Write ONLY narrative in Thai script; use "เรา" where the story is still from our perspective, but do not write voluntary actions unless reflex or others act on us.
+- ONLY Thai for the story—no Chinese, Japanese, Korean, or English. No meta-commentary, no second draft, no explaining instructions or length limits.
+- REQUIRED SHAPE (critical): **One paragraph** that includes both what happens **to us** (or around us without voluntary action) and **at least one clear beat** of others or the environment **moving or changing** in ways we perceive. No frozen background—whoever or whatever the situation implies (crowd, foe, crew, wilds, building, device, weather, etc.) must **do something specific** in this beat when the situation calls for it.
+- LOG LENGTH: Aim for **2–4 short sentences**, about **220–420 Thai characters**. No long recap of earlier logs. Do not comment on length.
 
 Current world state:
-${worldStateStr || "(none)"}
-
-Mission progress: ${missionProgress}%
+${formatWorldState(worldState) || "(none)"}
 
 Situation:
 ${situation}
 
-Recent events:
+Recent story:
 ${recentEvents.length > 0 ? recentEvents.join("\n") : "(none yet)"}
 
-Continue the scene with NO player input—automatic continuation.`;
+Continue the scene in Thai (prose only).`;
 }
 
-const PROGRESS_REGEX = /\[PROGRESS:([+-]?\d+)\]\s*$/im;
+/** Layer B — อัปเดตเฉพาะฉาก (ห้าม rule_/goal_/system_/mission_success) */
+export function buildSceneDeltaPrompt(
+  situation: string,
+  worldState: WorldState,
+  narrativeThai: string,
+  playerAction: string
+): string {
+  return `You are the SCENE STATE UPDATER for Blind Protocol. You do NOT write story prose.
+
+Your ONLY output must be a [STATE_UPDATES] block (English keys, values as strings/numbers/booleans). No other text before or after the block.
+
+Allowed keys:
+- ONLY physical / discoverable scene state: keys that already appear below OR new snake_case keys for things the protagonist could perceive (use whatever prefixes fit the scenario—location_*, actor_*, antagonist_*, device_*, env_*, etc.).
+- FORBIDDEN: any key starting with rule_, goal_, or system_, and the key "${MISSION_SUCCESS}" — do not output these.
+
+Rules:
+- Update values when the narrative implies a physical change. Add new keys only for new observable facts.
+- Reflect **other actors and the environment** moving or changing (not only the protagonist), when the narrative describes them.
+- In-progress beats (e.g. comms ringing, tool half-used, door straining) belong here as **scene** keys—do not use goal_*; Layer C sets goals only when fully won.
+- NO counts, NO abstract event flags—only concrete environment/perception state.
+- The narrative below is the source of truth for what changed.
+
+Player action (context):
+${playerAction}
+
+Narrative (Thai, what just happened):
+${narrativeThai}
+
+Situation summary:
+${situation}
+
+Current world state:
+${formatWorldState(worldState) || "(none)"}
+
+Respond with ONLY:
+[STATE_UPDATES]
+key=value
+[/STATE_UPDATES]`;
+}
+
+export function buildAftermathSceneDeltaPrompt(
+  situation: string,
+  worldState: WorldState,
+  narrativeThai: string
+): string {
+  return `You are the SCENE STATE UPDATER for Blind Protocol. You do NOT write story prose.
+
+Your ONLY output must be a [STATE_UPDATES] block. No other text.
+
+Allowed keys: physical / observable scene state only (existing keys or new keys matching the scenario’s place, actors, devices, environment). FORBIDDEN: rule_, goal_, system_ prefixes and "${MISSION_SUCCESS}".
+- Update state for **others and the environment** when the narrative shows them moving or changing.
+
+There was NO player action this step—only automatic world continuation.
+
+Narrative (Thai):
+${narrativeThai}
+
+Situation:
+${situation}
+
+Current world state:
+${formatWorldState(worldState) || "(none)"}
+
+[STATE_UPDATES]
+key=value
+[/STATE_UPDATES]`;
+}
+
+/** Layer C — rule, goal, protagonist alive, mission_success, MISSION_IMPOSSIBLE */
+export function buildOutcomePrompt(
+  situation: string,
+  worldState: WorldState,
+  narrativeThai: string,
+  playerAction: string
+): string {
+  return `You are the OUTCOME ADJUDICATOR for Blind Protocol. You do NOT write story prose.
+
+Output ONLY a [STATE_UPDATES] block plus optionally the tag [MISSION_IMPOSSIBLE] on its own line after the block if the mission can no longer succeed.
+
+Allowed keys in [STATE_UPDATES] ONLY:
+- rule_* / goal_* : **Only use keys that already appear in “Current world state” below.** Do **not** invent new rule_* or goal_* names (e.g. no rule_summoning_authorities_failed)—those belong in the narrative log, not as new state keys. If a setback happens but no existing rule_* applies, **omit** rule_* updates; Layer B can reflect facts with scene keys.
+- rule_* : set to yes ONLY if a forbidden outcome for this scenario has clearly occurred (crew loses), using an **existing** rule_* key.
+- goal_* : set to yes ONLY when that win condition is **fully and unambiguously complete** for this scenario—not on intent, first step, or “probably OK”—and only on an **existing** goal_* key.
+  - **Conservative:** If the story shows only an **attempt** toward a goal (started a call, opened a channel, sent a message, began a ritual, triggered a signal) but does **not** clearly establish that the **stated win condition is actually fulfilled** (authority committed, escape complete, cure applied, seal done, backup truly en route per the scenario), **do not** set any goal_* to yes—**omit** goal_* lines so keys stay at previous values (usually no).
+  - Apply the same bar to **every** goal_* key: yes only when the narrative **unambiguously** matches what that key means in **this** situation—not a single hopeful line without confirmation.
+- ${MISSION_SUCCESS}=yes ONLY if success is clear but no goal_* key fits—same bar: **confirmed** outcome, not mid-action.
+- ${SYSTEM_PROTAGONIST_ALIVE}=no ONLY if the shared protagonist can no longer be controlled (death, unconscious, etc.).
+
+If nothing changed for these keys, output an empty [STATE_UPDATES] block still:
+[STATE_UPDATES]
+[/STATE_UPDATES]
+
+If rule violation and goal both seem true, still set rule_*=yes (loss takes precedence).
+
+Player action:
+${playerAction}
+
+Narrative (Thai):
+${narrativeThai}
+
+Situation:
+${situation}
+
+Current world state (after scene updates):
+${formatWorldState(worldState) || "(none)"}`;
+}
+
+export function buildAftermathOutcomePrompt(
+  situation: string,
+  worldState: WorldState,
+  narrativeThai: string
+): string {
+  return `You are the OUTCOME ADJUDICATOR for Blind Protocol. No story prose.
+
+Output [STATE_UPDATES] with ONLY rule_*, goal_*, ${MISSION_SUCCESS}, ${SYSTEM_PROTAGONIST_ALIVE}. Optionally add [MISSION_IMPOSSIBLE] after the block.
+
+**Never invent new rule_* or goal_* key names**—only update keys already listed in Current world state. goal_*=yes only when fully achieved; if unsure, omit goal_* updates.
+
+No player action this step—aftermath only.
+
+Narrative (Thai):
+${narrativeThai}
+
+Situation:
+${situation}
+
+Current world state:
+${formatWorldState(worldState) || "(none)"}`;
+}
+
+const PROGRESS_LEGACY_REGEX = /\[PROGRESS:[+-]?\d+\]/gi;
 const STATE_UPDATES_REGEX = /\[STATE_UPDATES\]\s*([\s\S]*?)\s*\[\/STATE_UPDATES\]/i;
 const MISSION_IMPOSSIBLE_REGEX = /\[MISSION_IMPOSSIBLE\]/i;
 
@@ -180,36 +306,221 @@ function parseValue(v: string): string | number | boolean {
   return trimmed;
 }
 
+export function parseStateUpdatesBlock(raw: string): WorldState {
+  const stateUpdates: WorldState = {};
+  const stateMatch = raw.trim().match(STATE_UPDATES_REGEX);
+  if (!stateMatch) return stateUpdates;
+  const block = stateMatch[1].trim();
+  for (const line of block.split("\n")) {
+    const eq = line.indexOf("=");
+    if (eq > 0) {
+      const key = line.slice(0, eq).trim().replace(/\s+/g, "_");
+      const value = parseValue(line.slice(eq + 1));
+      if (key) stateUpdates[key] = value;
+    }
+  }
+  return stateUpdates;
+}
+
+function isReservedForSceneOnly(key: string): boolean {
+  return (
+    key.startsWith("rule_") ||
+    key.startsWith("goal_") ||
+    key.startsWith("system_") ||
+    key === MISSION_SUCCESS
+  );
+}
+
+/** กรองเฉพาะคีย์ฉาก — ทิ้งคีย์ที่ห้ามในชั้น B */
+export function filterSceneStateUpdates(updates: WorldState): WorldState {
+  const out: WorldState = {};
+  for (const [k, v] of Object.entries(updates)) {
+    if (!isReservedForSceneOnly(k)) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * กรองผลชั้น C — ยอมรับ rule_* / goal_* เฉพาะคีย์ที่มีอยู่แล้วใน knownWorldState (จาก scenario)
+ * ป้องกันโมเดลสร้าง rule_* ใหม่ที่เป็นแค่ “log ของเหตุการณ์” แทนกติกาเรื่อง
+ */
+export function filterOutcomeStateUpdates(
+  updates: WorldState,
+  knownWorldState: WorldState
+): WorldState {
+  const out: WorldState = {};
+  for (const [k, v] of Object.entries(updates)) {
+    if (k.startsWith("rule_") || k.startsWith("goal_")) {
+      if (Object.prototype.hasOwnProperty.call(knownWorldState, k)) {
+        out[k] = v;
+      }
+      continue;
+    }
+    if (k === MISSION_SUCCESS || k === SYSTEM_PROTAGONIST_ALIVE) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+export function parseNarratorOutput(raw: string): string {
+  let t = raw.trim();
+  const idx = t.indexOf("[STATE_UPDATES]");
+  if (idx !== -1) t = t.slice(0, idx).trim();
+  t = t.replace(PROGRESS_LEGACY_REGEX, "").trim();
+  t = t.replace(/\n{3,}/g, "\n\n").trim();
+  return t;
+}
+
+/** อักขระที่ไม่ใช่ไทย — ถ้ามีให้รัน pass แปลเป็นภาษาไทย (Layer A ขั้นที่สอง) */
+const FOREIGN_SCRIPT_NORMALIZE_REGEX =
+  /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af\u0400-\u04FF\u0600-\u06FF]/;
+const THAI_SCRIPT_REGEX = /[\u0e00-\u0e7f]/;
+
+function narrativeNeedsThaiOnlyPass(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (FOREIGN_SCRIPT_NORMALIZE_REGEX.test(t)) return true;
+  if (!THAI_SCRIPT_REGEX.test(t)) return true;
+  return false;
+}
+
+/**
+ * Layer A: ถ้าตรวจพบภาษาอื่น (หรือไม่มีอักษรไทยเลย) เรียก AI อีกครั้งให้รวมเป็นภาษาไทยล้วนหนึ่งย่อหน้า
+ */
+export async function ensureNarrativeThaiOnly(narrative: string): Promise<string> {
+  const t = narrative.trim();
+  if (!narrativeNeedsThaiOnlyPass(t)) return t;
+  try {
+    const prompt = `The text below may contain Chinese, English, Korean, or other languages alone or mixed with Thai. Rewrite as ONE continuous paragraph in Thai ONLY (Thai script). Preserve who does what, dialogue meaning, and tension; translate any non-Thai into natural Thai. No other scripts, no meta-commentary, no notes:
+
+${t}`;
+    return parseNarratorOutput(await askAI(prompt));
+  } catch {
+    return t;
+  }
+}
+
+export function parseOutcomeMissionPossible(raw: string): boolean {
+  return !MISSION_IMPOSSIBLE_REGEX.test(raw);
+}
+
+export type ThreeLayerGmResult = {
+  narrative: string;
+  missionPossible: boolean;
+  sceneUpdates: WorldState;
+  outcomeUpdates: WorldState;
+};
+
+/** 3 ชั้น: Narrator → Scene → Outcome (เทิร์นผู้เล่น) */
+export async function runThreeLayerPlayerTurn(params: {
+  situation: string;
+  recentActions: string[];
+  playerAction: string;
+  worldState: WorldState;
+}): Promise<ThreeLayerGmResult> {
+  const { situation, recentActions, playerAction, worldState } = params;
+
+  let narrativeRaw: string;
+  try {
+    narrativeRaw = await askAI(
+      buildNarratorPrompt(situation, recentActions, playerAction, worldState)
+    );
+  } catch {
+    narrativeRaw = `[ห้องสั่น — ระบบเล่าเรื่องไม่พร้อม]`;
+  }
+  let narrative = parseNarratorOutput(narrativeRaw);
+  narrative = await ensureNarrativeThaiOnly(narrative);
+
+  let sceneRaw = "";
+  try {
+    sceneRaw = await askAI(
+      buildSceneDeltaPrompt(situation, worldState, narrative, playerAction)
+    );
+  } catch {
+    sceneRaw = "";
+  }
+  const sceneUpdates = filterSceneStateUpdates(parseStateUpdatesBlock(sceneRaw));
+
+  const worldAfterScene: WorldState = { ...worldState, ...sceneUpdates };
+
+  let outcomeRaw = "";
+  try {
+    outcomeRaw = await askAI(
+      buildOutcomePrompt(situation, worldAfterScene, narrative, playerAction)
+    );
+  } catch {
+    outcomeRaw = "";
+  }
+  const missionPossible = parseOutcomeMissionPossible(outcomeRaw);
+  const outcomeUpdates = filterOutcomeStateUpdates(
+    parseStateUpdatesBlock(outcomeRaw),
+    worldAfterScene
+  );
+
+  return { narrative, missionPossible, sceneUpdates, outcomeUpdates };
+}
+
+/** 3 ชั้น: หนึ่งสเต็ป aftermath */
+export async function runThreeLayerAftermathStep(params: {
+  situation: string;
+  recentEvents: string[];
+  worldState: WorldState;
+}): Promise<ThreeLayerGmResult> {
+  const { situation, recentEvents, worldState } = params;
+
+  let narrativeRaw: string;
+  try {
+    narrativeRaw = await askAI(
+      buildAftermathNarratorPrompt(situation, recentEvents, worldState)
+    );
+  } catch {
+    narrativeRaw = `[เหตุการณ์ดำเนินต่อ — ระบบ AI ไม่พร้อม]`;
+  }
+  let narrative = parseNarratorOutput(narrativeRaw);
+  narrative = await ensureNarrativeThaiOnly(narrative);
+
+  let sceneRaw = "";
+  try {
+    sceneRaw = await askAI(
+      buildAftermathSceneDeltaPrompt(situation, worldState, narrative)
+    );
+  } catch {
+    sceneRaw = "";
+  }
+  const sceneUpdates = filterSceneStateUpdates(parseStateUpdatesBlock(sceneRaw));
+
+  const worldAfterScene: WorldState = { ...worldState, ...sceneUpdates };
+
+  let outcomeRaw = "";
+  try {
+    outcomeRaw = await askAI(
+      buildAftermathOutcomePrompt(situation, worldAfterScene, narrative)
+    );
+  } catch {
+    outcomeRaw = "";
+  }
+  const missionPossible = parseOutcomeMissionPossible(outcomeRaw);
+  const outcomeUpdates = filterOutcomeStateUpdates(
+    parseStateUpdatesBlock(outcomeRaw),
+    worldAfterScene
+  );
+
+  return { narrative, missionPossible, sceneUpdates, outcomeUpdates };
+}
+
+/**
+ * @deprecated ใช้ runThreeLayerPlayerTurn / runThreeLayerAftermathStep แทน
+ */
 export function parseActionResponse(raw: string): {
   narrative: string;
-  progressDelta: number;
   stateUpdates: WorldState;
   missionPossible: boolean;
 } {
-  let text = raw.trim();
-  const stateUpdates: WorldState = {};
-  const missionPossible = !MISSION_IMPOSSIBLE_REGEX.test(text);
-  text = text.replace(MISSION_IMPOSSIBLE_REGEX, "").trim();
-
-  const stateMatch = text.match(STATE_UPDATES_REGEX);
-  if (stateMatch) {
-    text = text.replace(STATE_UPDATES_REGEX, "").trim();
-    const block = stateMatch[1].trim();
-    for (const line of block.split("\n")) {
-      const eq = line.indexOf("=");
-      if (eq > 0) {
-        const key = line.slice(0, eq).trim().replace(/\s+/g, "_");
-        const value = parseValue(line.slice(eq + 1));
-        if (key) stateUpdates[key] = value;
-      }
-    }
-  }
-
-  const progressMatch = text.match(PROGRESS_REGEX);
-  const progressDelta = progressMatch
-    ? Math.max(-20, Math.min(20, parseInt(progressMatch[1], 10) || 0))
-    : 0;
-  const narrative = text.replace(PROGRESS_REGEX, "").trim();
-
-  return { narrative, progressDelta, stateUpdates, missionPossible };
+  const missionPossible = parseOutcomeMissionPossible(raw);
+  let text = raw.trim().replace(MISSION_IMPOSSIBLE_REGEX, "").trim();
+  const stateUpdates = parseStateUpdatesBlock(text);
+  text = text.replace(STATE_UPDATES_REGEX, "").trim();
+  text = text.replace(PROGRESS_LEGACY_REGEX, "").trim();
+  return { narrative: text, stateUpdates, missionPossible };
 }
