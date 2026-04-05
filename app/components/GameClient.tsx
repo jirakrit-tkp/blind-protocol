@@ -59,6 +59,23 @@ function tallyStats(tallies: { playerId: string; count: number }[] | undefined) 
   return { map, max };
 }
 
+function voteOutcomeSubtitle(
+  role: "imposter" | "normal" | undefined,
+  won: boolean | undefined
+): string {
+  if (won === undefined || !role) {
+    return "This round is over.";
+  }
+  if (role === "imposter") {
+    return won
+      ? "You were the Imposter—and the crew never exposed you."
+      : "You were the Imposter, but the group figured you out.";
+  }
+  return won
+    ? "You were crew—and together you unmasked the Imposter."
+    : "You were crew, but the vote missed the real Imposter.";
+}
+
 const ROLE_COPY: Record<
   "imposter" | "normal",
   { title: string; body: string; className: string }
@@ -781,6 +798,9 @@ function GameClient() {
                         : youLose
                           ? "YOU LOSE"
                           : "GAME OVER"}
+                    </p>
+                    <p className="mx-auto mt-4 max-w-md text-base font-medium leading-relaxed opacity-90 sm:text-lg">
+                      {voteOutcomeSubtitle(r, won)}
                     </p>
                   </div>
                 );
