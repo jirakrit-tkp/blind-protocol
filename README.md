@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Blind Protocol
 
-## Getting Started
+Multiplayer lobby + Socket.IO game UI built with [Next.js](https://nextjs.org).
 
-First, run the development server:
+## Requirements
+
+- [Node.js](https://nodejs.org/) (LTS recommended)
+- npm (comes with Node)
+
+## Install
+
+```bash
+npm install
+```
+
+## Configuration
+
+Copy the example env file and edit values as needed:
+
+```bash
+copy .env.example .env.local
+```
+
+On macOS or Linux:
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Purpose |
+| --- | --- |
+| `GAME_PASSCODE` | Room password players enter on the login screen. Used by the Socket.IO server (`npm run socket`). Default in code is `JourneyToJupiter` if unset. |
+| `NEXT_PUBLIC_SOCKET_URL` | Public **https** URL of the Socket server when you open the app through a tunnel (see below). If unset, the browser uses `http://localhost:3001`. |
+
+After changing `NEXT_PUBLIC_*` variables, restart the Next.js dev server.
+
+## Run the game (development)
+
+The app has two processes:
+
+- **Next.js** — web UI on [http://localhost:3000](http://localhost:3000)
+- **Socket.IO** — realtime server on port **3001**
+
+Start both in one terminal:
+
+```bash
+npm run dev:all
+```
+
+Or run them separately (two terminals):
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```bash
+npm run socket
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open [http://localhost:3000](http://localhost:3000), enter the passcode (same as `GAME_PASSCODE`) and your display name, then join the lobby.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Scripts
 
-## Learn More
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Next.js dev server only (port 3000) |
+| `npm run socket` | Socket.IO server only (port 3001) |
+| `npm run dev:all` | Both, via [concurrently](https://www.npmjs.com/package/concurrently) |
+| `npm run build` / `npm run start` | Production build and serve (Next only; you still need the socket server running separately for full game behavior) |
+| `npm run lint` | ESLint |
 
-To learn more about Next.js, take a look at the following resources:
+## Play with others over the internet (optional)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Browsers block a **public** page from calling `http://localhost:3001`, so you need two HTTPS tunnels (e.g. [Cloudflare Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) with [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)):
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Keep `npm run dev:all` running.
+2. Terminal A: `cloudflared tunnel --url http://localhost:3000` — share this URL to open the game.
+3. Terminal B: `cloudflared tunnel --url http://localhost:3001` — put its **https** URL in `.env.local` as `NEXT_PUBLIC_SOCKET_URL` (no trailing slash).
+4. Restart `npm run dev` (or `dev:all`) so Next picks up the env var.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Quick tunnel URLs change each time you restart `cloudflared`.

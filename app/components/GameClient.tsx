@@ -270,6 +270,7 @@ function GameClient() {
               placeholder="Enter passcode"
               className="border border-violet-200 dark:border-violet-800/60 px-3 py-2 rounded-lg bg-white/80 dark:bg-violet-950/30 text-zinc-900 dark:text-zinc-100"
               onKeyDown={(e) => e.key === "Enter" && handleEnter()}
+              suppressHydrationWarning
             />
           </label>
           <label className="flex flex-col gap-1 text-zinc-800 dark:text-zinc-200">
@@ -281,6 +282,7 @@ function GameClient() {
               placeholder="Enter name"
               className="border border-violet-200 dark:border-violet-800/60 px-3 py-2 rounded-lg bg-white/80 dark:bg-violet-950/30 text-zinc-900 dark:text-zinc-100"
               onKeyDown={(e) => e.key === "Enter" && handleEnter()}
+              suppressHydrationWarning
             />
           </label>
           <button
@@ -507,6 +509,7 @@ function GameClient() {
                 <input
                   type="text"
                   value={actionInput}
+                  suppressHydrationWarning
                   onChange={(e) => {
                     const v = e.target.value.slice(0, MAX_PLAYER_ACTION_LENGTH);
                     setActionInput(v);
