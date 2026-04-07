@@ -39,6 +39,8 @@ export type Room = {
     accusedId: string;
     imposterId: string;
     crewWon: boolean;
+    /** Mission succeeded before voting (from world state at resolution). */
+    missionSucceeded?: boolean;
     tally: { playerId: string; count: number }[];
   };
 };

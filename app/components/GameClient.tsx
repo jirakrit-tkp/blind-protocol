@@ -27,6 +27,7 @@ type VoteOutcome = {
   accusedId: string;
   imposterId: string;
   crewWon: boolean;
+  missionSucceeded?: boolean;
   tally: { playerId: string; count: number }[];
 };
 
@@ -64,21 +65,63 @@ function tallyStats(tallies: { playerId: string; count: number }[] | undefined) 
   return { map, max };
 }
 
+/** Vote correctly identified the imposter (same as `crewWon` on the server). */
+function endScreenHeadline(
+  role: "imposter" | "normal" | undefined,
+  missionSucceeded: boolean | undefined,
+  voteCorrect: boolean | undefined
+): "win" | "lose" | "gameover" | "unknown" {
+  if (!role || missionSucceeded === undefined || voteCorrect === undefined) {
+    return "unknown";
+  }
+  if (role === "normal") {
+    if (missionSucceeded && voteCorrect) return "win";
+    if (!missionSucceeded && !voteCorrect) return "lose";
+    return "gameover";
+  }
+  if (missionSucceeded && voteCorrect) return "lose";
+  if (!missionSucceeded && !voteCorrect) return "win";
+  return "gameover";
+}
+
+/**
+ * Eight outcomes: mission success/fail × vote correct/wrong × role (crew vs imposter).
+ * GAME OVER uses its own copy so the subtitle always explains the stalemate.
+ */
 function voteOutcomeSubtitle(
   role: "imposter" | "normal" | undefined,
-  won: boolean | undefined
+  missionSucceeded: boolean | undefined,
+  voteCorrect: boolean | undefined
 ): string {
-  if (won === undefined || !role) {
+  if (!role || missionSucceeded === undefined || voteCorrect === undefined) {
     return "This round is over.";
   }
-  if (role === "imposter") {
-    return won
-      ? "You were the Imposter—and the crew never exposed you."
-      : "You were the Imposter, but the group figured you out.";
+  const ms = missionSucceeded;
+  const vc = voteCorrect;
+
+  if (role === "normal") {
+    if (ms && vc) {
+      return "Mission succeeded and the crew voted for the real Imposter. Crew wins.";
+    }
+    if (ms && !vc) {
+      return "Mission succeeded, but the vote missed the Imposter. Game over—no clear winner.";
+    }
+    if (!ms && vc) {
+      return "Mission failed even though the crew exposed the Imposter. Game over—no clear winner.";
+    }
+    return "Mission failed and the vote missed the Imposter. Crew loses.";
   }
-  return won
-    ? "You were crew—and together you unmasked the Imposter."
-    : "You were crew, but the vote missed the real Imposter.";
+
+  if (ms && vc) {
+    return "Mission succeeded, but the crew identified you as the Imposter. You lose.";
+  }
+  if (ms && !vc) {
+    return "Mission succeeded and you stayed hidden from the vote. Game over—no clear winner.";
+  }
+  if (!ms && vc) {
+    return "Mission failed and the crew voted for you. Game over—no clear winner.";
+  }
+  return "Mission failed and the vote missed you. You win.";
 }
 
 const ROLE_COPY: Record<
@@ -847,6 +890,44 @@ function GameClient() {
     setMissionChainDone(true);
   }, []);
 
+  const logScrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevLogLenForScrollRef = useRef<number | null>(null);
+  const prevMissionUnlockedForScrollRef = useRef(false);
+  const prevBeatForScrollRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const len = roomState?.logs?.length ?? 0;
+    if (len === 0 && !beatPending) {
+      prevLogLenForScrollRef.current = null;
+      prevMissionUnlockedForScrollRef.current = false;
+      prevBeatForScrollRef.current = false;
+      return;
+    }
+
+    const unlocked = missionOutcomeUnlocked;
+    const prevLen = prevLogLenForScrollRef.current;
+    const prevUnlocked = prevMissionUnlockedForScrollRef.current;
+    const hasBeat = Boolean(beatPending);
+    const prevHasBeat = prevBeatForScrollRef.current;
+
+    const shouldScroll =
+      prevLen === null
+        ? len > 0 || hasBeat
+        : len > prevLen ||
+          (!prevUnlocked && unlocked) ||
+          (!prevHasBeat && hasBeat);
+
+    prevLogLenForScrollRef.current = len;
+    prevMissionUnlockedForScrollRef.current = unlocked;
+    prevBeatForScrollRef.current = hasBeat;
+
+    if (!shouldScroll) return;
+
+    const el = logScrollContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [roomState?.logs?.length, missionOutcomeUnlocked, beatPending]);
+
   const lobbyControlShell =
     "w-full min-h-12 rounded-xl border-2 px-4 py-3 text-base font-medium transition-colors";
   const lobbySelectClass = `${lobbyControlShell} crt-card hover:bg-[color-mix(in_srgb,var(--crt-panel)_70%,var(--crt-bg)_30%)]`;
@@ -914,7 +995,7 @@ function GameClient() {
               value={passcode}
               onChange={(e) => setPasscode(e.target.value)}
               placeholder="Enter passcode"
-              className="border border-violet-200 dark:border-violet-800/60 px-3 py-2 rounded-lg bg-white/80 dark:bg-violet-950/30 text-zinc-900 dark:text-zinc-100 w-full"
+              className="crt-action-input w-full rounded-lg border-2 border-violet-200 py-2 pl-3 text-zinc-900 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-zinc-100"
               onKeyDown={(e) => e.key === "Enter" && handleEnter()}
               suppressHydrationWarning
             />
@@ -926,7 +1007,7 @@ function GameClient() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Enter name"
-              className="border border-violet-200 dark:border-violet-800/60 px-3 py-2 rounded-lg bg-white/80 dark:bg-violet-950/30 text-zinc-900 dark:text-zinc-100 w-full"
+              className="crt-action-input w-full rounded-lg border-2 border-violet-200 py-2 pl-3 text-zinc-900 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-zinc-100"
               onKeyDown={(e) => e.key === "Enter" && handleEnter()}
               suppressHydrationWarning
             />
@@ -1006,6 +1087,15 @@ function GameClient() {
           >
             {isStarting ? "Starting…" : "Start game"}
           </button>
+          <div className="flex w-full justify-center border-t border-violet-200/50 pt-4 dark:border-violet-800/30">
+            <button
+              type="button"
+              onClick={() => setEndGameConfirmOpen(true)}
+              className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-semibold"
+            >
+              End game
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-3 w-full">
@@ -1025,102 +1115,6 @@ function GameClient() {
             </p>
           )}
 
-          {roomState.phase === "voting" && roomState.players.length > 0 ? (
-            <div className="crt-vote-panel rounded-2xl border-2 p-5">
-              <h2 className="text-center text-xl font-bold">
-                Vote for the Imposter
-              </h2>
-              {roomState.voteTieInfo ? (
-                <div
-                  className="crt-vote-tie-banner mt-3 px-3 py-3 text-sm"
-                  role="status"
-                >
-                  <p className="font-bold">Vote tied — vote again.</p>
-                  <p className="mt-1 text-xs opacity-90">
-                    Last-round counts are shown on each name below.
-                  </p>
-                </div>
-              ) : null}
-              <p className="mt-1 text-center text-sm text-zinc-600 dark:text-zinc-400">
-                {Object.keys(roomState.votes ?? {}).length}/
-                {roomState.players.length} votes — select a player, then confirm
-              </p>
-              {mySocketId &&
-              roomState.votes &&
-              Object.hasOwn(roomState.votes, mySocketId) ? (
-                <p className="mt-3 text-center text-sm font-semibold">
-                  Your vote:{" "}
-                  {roomState.players.find(
-                    (x) => x.id === roomState.votes[mySocketId]
-                  )?.name ?? "—"}
-                </p>
-              ) : null}
-              <div
-                className="mt-4 grid gap-3 sm:grid-cols-2"
-                role="radiogroup"
-                aria-label="Choose who you think is the Imposter"
-              >
-                {roomState.players.map((p) => {
-                  const hasVoted = Boolean(
-                    mySocketId &&
-                      roomState.votes &&
-                      Object.hasOwn(roomState.votes, mySocketId)
-                  );
-                  const selected = voteSelectionId === p.id;
-                  const { map: prevTallyMap, max: prevTop } = tallyStats(
-                    roomState.voteTieInfo?.tallies
-                  );
-                  const prevCount = prevTallyMap.get(p.id) ?? 0;
-                  const prevIsTop =
-                    Boolean(roomState.voteTieInfo) &&
-                    prevTop > 0 &&
-                    prevCount === prevTop;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      disabled={hasVoted}
-                      onClick={() =>
-                        setVoteSelectionId((prev) =>
-                          prev === p.id ? null : p.id
-                        )
-                      }
-                      className={`crt-vote-target rounded-xl border-2 px-4 py-5 text-center text-lg font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                        selected ? "crt-vote-target--selected" : ""
-                      } ${
-                        prevIsTop && !selected
-                          ? "crt-vote-target--tie-hint"
-                          : ""
-                      }`}
-                    >
-                      <span className="block">{p.name}</span>
-                      {roomState.voteTieInfo ? (
-                        <span className="mt-2 block text-sm font-semibold tabular-nums opacity-90">
-                          Last round: {prevCount} vote
-                          {prevCount === 1 ? "" : "s"}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-              {mySocketId &&
-              roomState.votes &&
-              !Object.hasOwn(roomState.votes, mySocketId) ? (
-                <button
-                  type="button"
-                  onClick={confirmVote}
-                  disabled={!voteSelectionId}
-                  className="crt-btn-cta mt-4 w-full min-h-12 rounded-xl border-2 px-4 py-3 text-base font-bold disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  Confirm vote
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
           {roomState.phase === "end" && roomState.voteOutcome ? (
             <div className="flex flex-col gap-4">
               {(() => {
@@ -1129,14 +1123,15 @@ function GameClient() {
                 const r = mySocketId
                   ? roomState.players.find((p) => p.id === mySocketId)?.role
                   : undefined;
-                const won =
-                  r === "imposter"
-                    ? !vo.crewWon
-                    : r === "normal"
-                      ? vo.crewWon
-                      : undefined;
-                const youWin = won === true;
-                const youLose = won === false;
+                const missionSucceeded =
+                  vo.missionSucceeded ?? isMissionWon(roomState.worldState);
+                const headline = endScreenHeadline(
+                  r,
+                  missionSucceeded,
+                  vo.crewWon
+                );
+                const youWin = headline === "win";
+                const youLose = headline === "lose";
                 return (
                   <div
                     className="crt-hr-border px-6 py-10 text-center"
@@ -1150,7 +1145,11 @@ function GameClient() {
                           : "GAME OVER"}
                     </p>
                     <p className="mx-auto mt-4 max-w-md text-base font-medium leading-relaxed opacity-90 sm:text-lg">
-                      {voteOutcomeSubtitle(r, won)}
+                      {voteOutcomeSubtitle(
+                        r,
+                        missionSucceeded,
+                        vo.crewWon
+                      )}
                     </p>
                   </div>
                 );
@@ -1297,7 +1296,10 @@ function GameClient() {
                   </span>
                 </p>
               ) : null}
-              <div className="mt-2 max-h-48 overflow-y-auto py-1">
+              <div
+                ref={logScrollContainerRef}
+                className="mt-2 max-h-48 overflow-y-auto py-1"
+              >
                 {roomState.logs.length === 0 && !beatPending && !gmThinking ? (
                   <p className="opacity-70">No actions yet.</p>
                 ) : (
@@ -1405,6 +1407,102 @@ function GameClient() {
               </div>
             </div>
           </div>
+          ) : null}
+
+          {roomState.phase === "voting" && roomState.players.length > 0 ? (
+            <div className="crt-vote-panel rounded-2xl border-2 p-5">
+              <h2 className="text-center text-xl font-bold">
+                Vote for the Imposter
+              </h2>
+              {roomState.voteTieInfo ? (
+                <div
+                  className="crt-vote-tie-banner mt-3 px-3 py-3 text-sm"
+                  role="status"
+                >
+                  <p className="font-bold">Vote tied — vote again.</p>
+                  <p className="mt-1 text-xs opacity-90">
+                    Last-round counts are shown on each name below.
+                  </p>
+                </div>
+              ) : null}
+              <p className="mt-1 text-center text-sm text-zinc-600 dark:text-zinc-400">
+                {Object.keys(roomState.votes ?? {}).length}/
+                {roomState.players.length} votes — select a player, then confirm
+              </p>
+              {mySocketId &&
+              roomState.votes &&
+              Object.hasOwn(roomState.votes, mySocketId) ? (
+                <p className="mt-3 text-center text-sm font-semibold">
+                  Your vote:{" "}
+                  {roomState.players.find(
+                    (x) => x.id === roomState.votes[mySocketId]
+                  )?.name ?? "—"}
+                </p>
+              ) : null}
+              <div
+                className="mt-4 grid gap-3 sm:grid-cols-2"
+                role="radiogroup"
+                aria-label="Choose who you think is the Imposter"
+              >
+                {roomState.players.map((p) => {
+                  const hasVoted = Boolean(
+                    mySocketId &&
+                      roomState.votes &&
+                      Object.hasOwn(roomState.votes, mySocketId)
+                  );
+                  const selected = voteSelectionId === p.id;
+                  const { map: prevTallyMap, max: prevTop } = tallyStats(
+                    roomState.voteTieInfo?.tallies
+                  );
+                  const prevCount = prevTallyMap.get(p.id) ?? 0;
+                  const prevIsTop =
+                    Boolean(roomState.voteTieInfo) &&
+                    prevTop > 0 &&
+                    prevCount === prevTop;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      disabled={hasVoted}
+                      onClick={() =>
+                        setVoteSelectionId((prev) =>
+                          prev === p.id ? null : p.id
+                        )
+                      }
+                      className={`crt-vote-target rounded-xl border-2 px-4 py-5 text-center text-lg font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        selected ? "crt-vote-target--selected" : ""
+                      } ${
+                        prevIsTop && !selected
+                          ? "crt-vote-target--tie-hint"
+                          : ""
+                      }`}
+                    >
+                      <span className="block">{p.name}</span>
+                      {roomState.voteTieInfo ? (
+                        <span className="mt-2 block text-sm font-semibold tabular-nums opacity-90">
+                          Last round: {prevCount} vote
+                          {prevCount === 1 ? "" : "s"}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {mySocketId &&
+              roomState.votes &&
+              !Object.hasOwn(roomState.votes, mySocketId) ? (
+                <button
+                  type="button"
+                  onClick={confirmVote}
+                  disabled={!voteSelectionId}
+                  className="crt-btn-cta mt-4 w-full min-h-12 rounded-xl border-2 px-4 py-3 text-base font-bold disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  Confirm vote
+                </button>
+              ) : null}
+            </div>
           ) : null}
 
           {roomState.phase === "playing" && (

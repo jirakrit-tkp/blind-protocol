@@ -452,12 +452,14 @@ io.on("connection", (socket) => {
     const imposter = room.players.find((p) => p.role === "imposter");
     const imposterId = imposter?.id ?? "";
     const crewWon = Boolean(imposterId && accusedId === imposterId);
+    const missionSucceeded = isMissionWon(room.worldState);
 
     room.voteTieInfo = undefined;
     room.voteOutcome = {
       accusedId,
       imposterId,
       crewWon,
+      missionSucceeded,
       tally: talliesSorted,
     };
     room.phase = "end";
@@ -488,7 +490,7 @@ io.on("connection", (socket) => {
   socket.on("reset_game", () => {
     const room = getRoomForSocket(socket.id);
     if (!room || room.id !== MAIN_ROOM_ID) return;
-    if (!["playing", "voting", "end"].includes(room.phase)) return;
+    if (!["lobby", "playing", "voting", "end"].includes(room.phase)) return;
     resetMainRoomToLobby(io);
   });
 
