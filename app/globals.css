@@ -1,8 +1,40 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f0fc;
-  --foreground: #2b2140;
+  --background: #d7d7d7;
+  --foreground: #313131;
+  --crt-bg: #d7d7d7;
+  /* Light CRT: panels slightly above page grey; content areas use near-white below */
+  --crt-panel: #d8d8d8;
+  --crt-text: #313131;
+  --crt-border: #666666;
+  --crt-soft: #adadad;
+  --crt-glow: rgba(49, 49, 49, 0.2);
+  --crt-readable-bg: #ffffff;
+  --crt-readable-text: #1a1a1a;
+  --crt-readable-sub-bg: #f3f3f3;
+  --crt-readable-border: #a3a3a3;
+  /* Vote UI — same structure as dark, different palette */
+  --vote-panel-bg: var(--crt-readable-bg);
+  --vote-panel-border: var(--crt-readable-border);
+  --vote-target-bg: var(--crt-readable-bg);
+  --vote-target-border: var(--crt-border);
+  --vote-target-text: var(--crt-readable-text);
+  --vote-target-hover-bg: color-mix(
+    in srgb,
+    var(--crt-readable-border) 12%,
+    var(--crt-readable-bg) 88%
+  );
+  --vote-target-hover-border: color-mix(
+    in srgb,
+    var(--crt-text) 45%,
+    var(--crt-border) 55%
+  );
+  --vote-target-tie-border: color-mix(
+    in srgb,
+    var(--crt-soft) 40%,
+    var(--crt-border) 60%
+  );
 }
 
 @theme inline {
@@ -12,15 +44,332 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #14101c;
-    --foreground: #ede9fe;
-  }
+:root[data-ui-theme="dark"] {
+  --background: #050705;
+  --foreground: #7eff9a;
+  --crt-bg: #050705;
+  --crt-panel: #0c120c;
+  --crt-text: #7eff9a;
+  --crt-border: #2a5030;
+  --crt-soft: #589664;
+  --crt-glow: rgba(126, 255, 154, 0.35);
+  --crt-readable-bg: var(--crt-panel);
+  --crt-readable-text: var(--crt-text);
+  --crt-readable-sub-bg: var(--crt-panel);
+  --crt-readable-border: var(--crt-border);
+  --vote-panel-bg: color-mix(in srgb, var(--crt-panel) 92%, var(--crt-bg) 8%);
+  --vote-panel-border: var(--crt-border);
+  --vote-target-bg: color-mix(in srgb, var(--crt-bg) 62%, var(--crt-panel) 38%);
+  --vote-target-border: var(--crt-border);
+  --vote-target-text: var(--crt-text);
+  --vote-target-hover-bg: color-mix(in srgb, var(--crt-bg) 55%, var(--crt-panel) 45%);
+  --vote-target-hover-border: var(--crt-soft);
+  --vote-target-tie-border: color-mix(
+    in srgb,
+    var(--crt-soft) 75%,
+    var(--crt-border) 25%
+  );
+}
+
+/* 100vw/dvw can exceed the layout viewport when a vertical scrollbar is present; keep doc from scrolling horizontally. */
+html {
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 body {
+  overflow-x: hidden;
+  max-width: 100%;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.crt-ui {
+  position: relative;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Plain title on small viewports (ASCII hidden below md) */
+.crt-ui .crt-title-plain {
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+  text-shadow: none !important;
+}
+
+/* ASCII title must not inherit uppercase / glow from .crt-ui */
+.crt-title-ascii-wrap {
+  --ascii-title-font-size: 14px;
+  /* UA styles on <pre> use overflow: auto; hide scrollbars — size is driven by JS fit. */
+  overflow: hidden;
+}
+
+.crt-ui .crt-title-ascii {
+  font-size: var(--ascii-title-font-size, 14px);
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  line-height: 1 !important;
+  white-space: pre !important;
+  text-shadow: none !important;
+  overflow: hidden;
+  font-variant-numeric: normal;
+  font-feature-settings: normal;
+  font-family:
+    "Courier New", Courier, ui-monospace, var(--font-geist-mono), monospace !important;
+}
+
+.crt-ui,
+.crt-ui * {
+  color: var(--crt-text) !important;
+  border-color: var(--crt-border) !important;
+  box-shadow: none !important;
+}
+
+.crt-ui::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.09) 50%,
+    transparent 100%
+  );
+  background-size: 100% 3px;
+  opacity: 0.35;
+}
+
+.crt-ui :is(button, input, select, summary, details, pre, code, div, p, span, h1, h2) {
+  text-shadow: 0 0 2px var(--crt-glow);
+}
+
+.crt-ui :is(button, input, select, details, pre) {
+  background: var(--crt-panel) !important;
+}
+
+.crt-card {
+  background: color-mix(in srgb, var(--crt-panel) 88%, var(--crt-bg) 12%) !important;
+}
+
+/* Light CRT: role / summary cards read as a clear “paper” panel on grey page */
+:root[data-ui-theme="light"] .crt-card {
+  background: color-mix(in srgb, #ffffff 88%, var(--crt-bg) 12%) !important;
+}
+
+.crt-card-muted {
+  background: color-mix(in srgb, var(--crt-panel) 60%, var(--crt-bg) 40%) !important;
+  color: var(--crt-soft) !important;
+}
+
+.crt-readable-surface {
+  border-color: var(--crt-readable-border) !important;
+  background: var(--crt-readable-bg) !important;
+  color: var(--crt-readable-text) !important;
+}
+
+.crt-readable-surface * {
+  color: var(--crt-readable-text) !important;
+}
+
+.crt-readable-subsurface {
+  border: 1px solid var(--crt-readable-border) !important;
+  background: var(--crt-readable-sub-bg) !important;
+  color: var(--crt-readable-text) !important;
+}
+
+.crt-readable-subsurface * {
+  color: var(--crt-readable-text) !important;
+}
+
+/* Role panel expanded body: light = readable panel; dark = no extra fill (matches parent crt-card). */
+.crt-role-panel-body {
+  border-top: 1px solid color-mix(in srgb, var(--crt-border) 55%, transparent);
+  background: var(--crt-readable-bg) !important;
+}
+
+.crt-role-panel-body :is(p) {
+  color: var(--crt-readable-text) !important;
+}
+
+:root[data-ui-theme="dark"] .crt-role-panel-body {
+  background: transparent !important;
+  border-top-color: var(--crt-border) !important;
+}
+
+:root[data-ui-theme="dark"] .crt-role-panel-body :is(p) {
+  color: var(--crt-text) !important;
+}
+
+.crt-ui input::placeholder {
+  color: var(--crt-soft) !important;
+}
+
+.crt-ui p.crt-typing-indicator,
+.crt-ui p.crt-typing-indicator * {
+  color: var(--crt-soft) !important;
+}
+
+/* Terminal-style block cursor for typewriter reveal */
+.crt-typewriter-cursor {
+  display: inline-block;
+  width: 0.5em;
+  min-height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.crt-mode-toggle {
+  border-color: var(--crt-border);
+  background: var(--crt-panel);
+}
+
+.crt-mode-toggle button {
+  min-width: 7.5rem;
+  border: 0;
+  background: transparent !important;
+  color: var(--crt-soft) !important;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.crt-mode-toggle button.is-active {
+  background: var(--crt-text) !important;
+  color: var(--crt-bg) !important;
+}
+
+.crt-mode-toggle button:not(.is-active):not(:disabled):hover {
+  color: var(--crt-text) !important;
+  background: color-mix(in srgb, var(--crt-panel) 82%, var(--crt-text) 18%) !important;
+}
+
+.crt-mode-toggle button.is-active:hover {
+  filter: brightness(1.06);
+}
+
+/* Same ring as vote selection (.crt-vote-target--selected / .crt-end-tally--top) */
+.crt-ui input:focus-visible,
+.crt-ui textarea:focus-visible {
+  outline: 2px solid var(--crt-text) !important;
+  outline-offset: 3px;
+}
+
+.crt-ui button:focus-visible:not(:disabled) {
+  outline: 2px solid var(--crt-text) !important;
+  outline-offset: 3px;
+}
+
+/* Clickable controls: pointer; disabled stays blocked */
+.crt-ui button:not(:disabled),
+.crt-ui summary {
+  cursor: pointer;
+}
+
+.crt-ui button:disabled {
+  cursor: not-allowed;
+}
+
+.crt-ui summary:hover {
+  opacity: 0.88;
+}
+
+/*
+ * Primary actions: Tailwind hover loses to `.crt-ui :is(button)` / `.crt-card` `!important`.
+ * These classes mirror intended hovers with matching specificity.
+ */
+.crt-ui button.crt-btn-cta {
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: var(--crt-border) !important;
+  background: color-mix(in srgb, var(--crt-panel) 88%, var(--crt-bg) 12%) !important;
+  color: var(--crt-text) !important;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+:root[data-ui-theme="light"] .crt-ui button.crt-btn-cta {
+  background: color-mix(in srgb, #ffffff 88%, var(--crt-bg) 12%) !important;
+}
+
+.crt-ui button.crt-btn-cta:hover:not(:disabled) {
+  background: var(--crt-text) !important;
+  color: var(--crt-bg) !important;
+}
+
+/* Horizontal rules only — no fill, square corners (tie banner, end result, etc.) */
+.crt-vote-tie-banner,
+.crt-hr-border {
+  background: transparent !important;
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: 2px solid var(--crt-border) !important;
+  border-bottom: 2px solid var(--crt-border) !important;
+}
+
+/* End-screen tally cards: no fill; top vote = same focus ring as voting */
+.crt-end-tally {
+  background: transparent !important;
+  border-radius: 0.75rem;
+  border: 2px solid var(--crt-border) !important;
+}
+
+.crt-end-tally--top {
+  outline: 2px solid var(--crt-text) !important;
+  outline-offset: 3px;
+}
+
+/* Voting — one structure for light/dark; colors from --vote-* tokens */
+.crt-vote-panel {
+  border-color: var(--vote-panel-border) !important;
+  background: var(--vote-panel-bg) !important;
+}
+
+/* Must beat `.crt-ui :is(button, …) { background: … !important }` */
+.crt-ui button.crt-vote-target {
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: var(--vote-target-border) !important;
+  background: var(--vote-target-bg) !important;
+  color: var(--vote-target-text) !important;
+}
+
+.crt-ui button.crt-vote-target:hover:not(:disabled) {
+  border-color: var(--vote-target-hover-border) !important;
+  background: var(--vote-target-hover-bg) !important;
+}
+
+.crt-ui button.crt-vote-target--selected {
+  outline: 2px solid var(--crt-text) !important;
+  outline-offset: 3px;
+}
+
+.crt-ui
+  button.crt-vote-target--tie-hint:not(.crt-vote-target--selected) {
+  border-color: var(--vote-target-tie-border) !important;
+}
+
+/*
+ * Playing action input — light: white readable fill.
+ * Must load after Tailwind and beat `.crt-ui :is(input) { background: var(--crt-panel) }`.
+ */
+html[data-ui-theme="light"] .crt-ui input.crt-action-input:enabled,
+html[data-ui-theme="light"] .crt-ui input.crt-action-input:enabled:hover,
+html[data-ui-theme="light"] .crt-ui input.crt-action-input:enabled:focus,
+html[data-ui-theme="light"] .crt-ui input.crt-action-input:enabled:focus-visible,
+html[data-ui-theme="light"] .crt-ui input.crt-action-input:enabled:active {
+  background-color: var(--crt-readable-bg) !important;
+  background-image: none !important;
+  border-color: var(--crt-readable-border) !important;
+  color: var(--crt-readable-text) !important;
+}
+
+html[data-ui-theme="light"] .crt-ui input.crt-action-input:enabled::placeholder {
+  color: var(--crt-soft) !important;
 }

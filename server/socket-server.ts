@@ -9,8 +9,17 @@ import {
   pickRandomScenarioFromPool,
 } from "../lib/scenario-pool";
 import {
+  CHEAT_CMD_FAIL,
+  CHEAT_CMD_SUCCESS,
+  NARRATIVE_FORCED_FAIL,
+  NARRATIVE_FORCED_SUCCESS,
+} from "../lib/mission-cheat-commands";
+import {
+  SYSTEM_FORCED_OUTCOME,
   SYSTEM_LOG_PLAYER_ID,
   defaultSystemWorldState,
+  getMissionOutcomeLine,
+  isForcedMissionFail,
   isMissionWon,
   isRuleFailed,
   isSystemProtagonistDead,
@@ -48,15 +57,11 @@ function getOrCreateMainRoom(): Room {
       phase: "lobby",
       worldState: {},
       lobbyTheme: defaultLobbyTheme(),
-      skipToVotePlayerIds: [],
       votes: {},
     };
     rooms.set(MAIN_ROOM_ID, room);
   } else if (typeof room.lobbyTheme !== "string") {
     room.lobbyTheme = defaultLobbyTheme();
-  }
-  if (!Array.isArray(room.skipToVotePlayerIds)) {
-    room.skipToVotePlayerIds = [];
   }
   if (!room.votes || typeof room.votes !== "object") {
     room.votes = {};
@@ -93,7 +98,6 @@ function getRoomState(room: Room, viewerSocketId?: string) {
     worldState: room.worldState,
     situation: room.situation,
     lobbyTheme: room.lobbyTheme,
-    skipToVotePlayerIds: [...(room.skipToVotePlayerIds ?? [])],
     votes: { ...(room.votes ?? {}) },
     voteOutcome: room.voteOutcome,
     voteTieInfo: room.voteTieInfo
@@ -109,6 +113,24 @@ function emitRoomUpdate(io: Server, room: Room) {
   for (const p of room.players) {
     io.to(p.id).emit("room_update", getRoomState(room, p.id));
   }
+}
+
+/** Append mission summary to log, then enter voting (imposter vote). */
+function pushMissionOutcomeAndEnterVoting(io: Server, room: Room) {
+  const line = getMissionOutcomeLine(room.worldState);
+  const outcomeLog: RoomLog = {
+    playerId: SYSTEM_LOG_PLAYER_ID,
+    action: "[MISSION OUTCOME]",
+    narrative: line,
+  };
+  room.logs.push(outcomeLog);
+  room.phase = "voting";
+  room.votes = {};
+  room.voteTieInfo = undefined;
+  io.to(room.id).emit("new_log", [outcomeLog]);
+  emitRoomUpdate(io, room);
+  io.to(room.id).emit("phase_change", "voting");
+  io.to(room.id).emit("turn_change", null);
 }
 
 const AFTERMATH_MAX_STEPS = 8;
@@ -237,7 +259,6 @@ io.on("connection", (socket) => {
     room.roundIndex = 0;
     room.worldState = { ...defaultSystemWorldState(), ...worldState };
     room.situation = situation;
-    room.skipToVotePlayerIds = [];
     room.votes = {};
     room.voteOutcome = undefined;
     room.voteTieInfo = undefined;
@@ -280,7 +301,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const recentActions = formatLogsForGmPrompt(room.logs);
     const situation =
       room.situation ??
       "A collaborative story. One shared protagonist. One imposter among the players.";
@@ -289,34 +309,52 @@ io.on("connection", (socket) => {
       playerId: socket.id,
       actionLine: `${currentPlayer.name}: ${action}`,
     });
-    io.to(room.id).emit("gm_thinking", { active: true });
+
+    const isCheatMission =
+      action === CHEAT_CMD_FAIL || action === CHEAT_CMD_SUCCESS;
+
     let narrative: string;
     let missionPossible: boolean;
     let sceneUpdates: Record<string, string | number | boolean>;
     let outcomeUpdates: Record<string, string | number | boolean>;
-    try {
-      const result = await runThreeLayerPlayerTurn({
-        situation,
-        recentActions,
-        playerAction: action,
-        worldState: room.worldState,
-      }).finally(() => {
-        io.to(room.id).emit("gm_thinking", { active: false });
-      });
-      narrative = result.narrative;
-      missionPossible = result.missionPossible;
-      sceneUpdates = result.sceneUpdates;
-      outcomeUpdates = result.outcomeUpdates;
-    } catch (err) {
-      console.error("runThreeLayerPlayerTurn", err);
-      io.to(room.id).emit("beat_aborted");
-      socket.emit("error", {
-        message: "The narrator failed to respond. Try again.",
-      });
-      return;
+
+    if (isCheatMission) {
+      room.worldState[SYSTEM_FORCED_OUTCOME] =
+        action === CHEAT_CMD_FAIL ? "fail" : "success";
+      narrative =
+        action === CHEAT_CMD_FAIL
+          ? NARRATIVE_FORCED_FAIL
+          : NARRATIVE_FORCED_SUCCESS;
+      missionPossible = true;
+      sceneUpdates = {};
+      outcomeUpdates = {};
+    } else {
+      const recentActions = formatLogsForGmPrompt(room.logs);
+      io.to(room.id).emit("gm_thinking", { active: true });
+      try {
+        const result = await runThreeLayerPlayerTurn({
+          situation,
+          recentActions,
+          playerAction: action,
+          worldState: room.worldState,
+        }).finally(() => {
+          io.to(room.id).emit("gm_thinking", { active: false });
+        });
+        narrative = result.narrative;
+        missionPossible = result.missionPossible;
+        sceneUpdates = result.sceneUpdates;
+        outcomeUpdates = result.outcomeUpdates;
+      } catch (err) {
+        console.error("runThreeLayerPlayerTurn", err);
+        io.to(room.id).emit("beat_aborted");
+        socket.emit("error", {
+          message: "The narrator failed to respond. Try again.",
+        });
+        return;
+      }
+      Object.assign(room.worldState, sceneUpdates);
+      Object.assign(room.worldState, outcomeUpdates);
     }
-    Object.assign(room.worldState, sceneUpdates);
-    Object.assign(room.worldState, outcomeUpdates);
 
     const protagonistUnplayable = isSystemProtagonistDead(room.worldState);
     const missionImpossible = !missionPossible;
@@ -342,69 +380,22 @@ io.on("connection", (socket) => {
     emitRoomUpdate(io, room);
 
     if (isRuleFailed(room.worldState)) {
-      room.phase = "end";
-      io.to(room.id).emit("phase_change", "end");
-      io.to(room.id).emit("turn_change", null);
+      pushMissionOutcomeAndEnterVoting(io, room);
     } else if (isMissionWon(room.worldState)) {
-      room.phase = "end";
-      io.to(room.id).emit("phase_change", "end");
-      io.to(room.id).emit("turn_change", null);
+      pushMissionOutcomeAndEnterVoting(io, room);
+    } else if (isForcedMissionFail(room.worldState)) {
+      pushMissionOutcomeAndEnterVoting(io, room);
     } else if (missionImpossible) {
-      room.phase = "end";
-      io.to(room.id).emit("phase_change", "end");
-      io.to(room.id).emit("turn_change", null);
+      pushMissionOutcomeAndEnterVoting(io, room);
     } else if (protagonistUnplayable) {
       io.to(room.id).emit("turn_change", null);
       await runAftermathNarration(io, room, situation);
-      room.phase = "end";
-      emitRoomUpdate(io, room);
-      io.to(room.id).emit("phase_change", "end");
+      pushMissionOutcomeAndEnterVoting(io, room);
     } else if (allTurnsUsed) {
-      room.phase = "end";
-      io.to(room.id).emit("phase_change", "end");
-      io.to(room.id).emit("turn_change", null);
+      pushMissionOutcomeAndEnterVoting(io, room);
     } else {
       io.to(room.id).emit("turn_change", nextPlayer?.id ?? null);
     }
-  });
-
-  function pruneSkipToVote(room: Room) {
-    const inRoom = new Set(room.players.map((p) => p.id));
-    room.skipToVotePlayerIds = room.skipToVotePlayerIds.filter((id) =>
-      inRoom.has(id)
-    );
-  }
-
-  function tryEnterVotingFromSkip(io: Server, room: Room) {
-    pruneSkipToVote(room);
-    const voted = new Set(room.skipToVotePlayerIds);
-    if (
-      room.players.length > 0 &&
-      voted.size === room.players.length &&
-      room.players.every((p) => voted.has(p.id))
-    ) {
-      room.phase = "voting";
-      room.skipToVotePlayerIds = [];
-      room.votes = {};
-      room.voteTieInfo = undefined;
-      io.to(room.id).emit("phase_change", "voting");
-      io.to(room.id).emit("turn_change", null);
-      emitRoomUpdate(io, room);
-    }
-  }
-
-  socket.on("ack_skip_to_vote", () => {
-    const room = getRoomForSocket(socket.id);
-    if (!room || room.phase !== "playing") return;
-
-    const inRoom = room.players.some((p) => p.id === socket.id);
-    if (!inRoom) return;
-
-    const voted = new Set(room.skipToVotePlayerIds);
-    voted.add(socket.id);
-    room.skipToVotePlayerIds = [...voted];
-    tryEnterVotingFromSkip(io, room);
-    if (room.phase === "playing") emitRoomUpdate(io, room);
   });
 
   socket.on("player_typing", (payload: { typing?: boolean }) => {
@@ -488,7 +479,6 @@ io.on("connection", (socket) => {
     room.worldState = {};
     delete room.situation;
     room.lobbyTheme = defaultLobbyTheme();
-    room.skipToVotePlayerIds = [];
     room.votes = {};
     room.voteOutcome = undefined;
     room.voteTieInfo = undefined;
@@ -527,15 +517,7 @@ io.on("connection", (socket) => {
         room.voteTieInfo = undefined;
       }
       room.players = room.players.filter((p) => p.id !== socket.id);
-      if (room.phase === "playing") {
-        pruneSkipToVote(room);
-        tryEnterVotingFromSkip(io, room);
-        if (room.phase === "playing") emitRoomUpdate(io, room);
-      } else if (room.phase === "voting") {
-        emitRoomUpdate(io, room);
-      } else {
-        emitRoomUpdate(io, room);
-      }
+      emitRoomUpdate(io, room);
     }
   });
 });

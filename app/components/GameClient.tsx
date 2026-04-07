@@ -5,17 +5,21 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createSocket } from "@/lib/socket-client";
 import { MAX_PLAYER_ACTION_LENGTH } from "@/lib/game-limits";
 import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
 import {
   isMissionWon,
-  isRuleFailed,
   isSystemProtagonistPlayable,
+  SYSTEM_LOG_PLAYER_ID,
 } from "@/lib/world-state";
+import { BLIND_PROTOCOL_ASCII } from "@/lib/blind-protocol-ascii";
 
 type WorldState = Record<string, string | number | boolean>;
 
@@ -41,11 +45,12 @@ type RoomState = {
   worldState: WorldState;
   situation?: string;
   lobbyTheme: string;
-  skipToVotePlayerIds: string[];
   votes: Record<string, string>;
   voteOutcome?: VoteOutcome;
   voteTieInfo?: VoteTieInfo;
 };
+
+type UiTheme = "light" | "dark";
 
 function tallyStats(tallies: { playerId: string; count: number }[] | undefined) {
   const map = new Map<string, number>();
@@ -83,31 +88,286 @@ const ROLE_COPY: Record<
   imposter: {
     title: "Imposter",
     body: "Blend in. You may steer the group toward failure.",
-    className:
-      "border-[3px] border-fuchsia-400/90 bg-gradient-to-b from-fuchsia-100/95 to-fuchsia-50/90 text-fuchsia-950 shadow-2xl shadow-fuchsia-950/15 ring-2 ring-fuchsia-300/60 dark:border-fuchsia-500/70 dark:from-fuchsia-950/80 dark:to-fuchsia-950/50 dark:text-fuchsia-50 dark:shadow-fuchsia-950/40 dark:ring-fuchsia-500/35",
+    className: "crt-card border-[3px]",
   },
   normal: {
     title: "Crew",
     body: "Help the mission succeed for this scenario.",
-    className:
-      "border-[3px] border-emerald-400/90 bg-gradient-to-b from-emerald-100/95 to-emerald-50/90 text-emerald-950 shadow-2xl shadow-emerald-950/12 ring-2 ring-emerald-300/60 dark:border-emerald-500/70 dark:from-emerald-950/80 dark:to-emerald-950/50 dark:text-emerald-50 dark:shadow-emerald-950/40 dark:ring-emerald-500/35",
+    className: "crt-card border-[3px]",
   },
 };
 
-function TypingDots() {
+function BlindProtocolAsciiTitle() {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const preRef = useRef<HTMLPreElement>(null);
+
+  const fitAsciiFont = useCallback(() => {
+    const wrap = wrapRef.current;
+    const pre = preRef.current;
+    if (!wrap || !pre) return;
+    /** Padding for rounding / font metrics so UA <pre> scrollbars never appear. */
+    const maxW = Math.max(0, wrap.clientWidth - 8);
+    if (maxW < 12) return;
+
+    const MIN_PX = 12;
+    /** Cap keeps fit stable; layout uses full viewport width via bleed wrapper. */
+    const MAX_PX = 128;
+    let lo = MIN_PX;
+    let hi = MAX_PX;
+    for (let i = 0; i < 28; i++) {
+      const mid = (lo + hi) / 2;
+      wrap.style.setProperty("--ascii-title-font-size", `${mid}px`);
+      if (pre.scrollWidth <= maxW) lo = mid;
+      else hi = mid;
+    }
+    let best = Math.max(MIN_PX, Math.floor(lo * 10) / 10);
+    wrap.style.setProperty("--ascii-title-font-size", `${best}px`);
+    for (let step = 0; step < 40; step++) {
+      if (
+        pre.scrollWidth <= maxW &&
+        pre.scrollHeight <= pre.clientHeight &&
+        pre.scrollWidth <= pre.clientWidth
+      ) {
+        break;
+      }
+      best = Math.max(MIN_PX, Math.round((best - 0.25) * 100) / 100);
+      wrap.style.setProperty("--ascii-title-font-size", `${best}px`);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    fitAsciiFont();
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(fitAsciiFont);
+    });
+    ro.observe(wrap);
+    void document.fonts.ready.then(() => {
+      requestAnimationFrame(fitAsciiFont);
+    });
+    return () => ro.disconnect();
+  }, [fitAsciiFont]);
+
   return (
-    <span
-      className="inline-flex items-center gap-1 pl-1 translate-y-px"
-      aria-hidden
-    >
-      <span className="size-1.5 rounded-full bg-current opacity-70 animate-bounce [animation-duration:1.1s]" />
-      <span className="size-1.5 rounded-full bg-current opacity-70 animate-bounce [animation-duration:1.1s] [animation-delay:150ms]" />
-      <span className="size-1.5 rounded-full bg-current opacity-70 animate-bounce [animation-duration:1.1s] [animation-delay:300ms]" />
+    <>
+      <h1 className="crt-title-plain max-w-full px-1 text-center font-mono text-3xl font-semibold leading-snug tracking-normal normal-case sm:text-4xl md:sr-only">
+        Blind Protocol
+      </h1>
+      <div
+        ref={wrapRef}
+        className="crt-title-ascii-wrap hidden w-full min-w-0 justify-center md:flex"
+      >
+        <pre
+          ref={preRef}
+          className="crt-title-ascii inline-block max-w-full min-w-0 text-left"
+          aria-hidden
+        >
+          {BLIND_PROTOCOL_ASCII}
+        </pre>
+      </div>
+    </>
+  );
+}
+
+BlindProtocolAsciiTitle.displayName = "BlindProtocolAsciiTitle";
+
+const TYPING_DOT_PHASES = [".", "..", "...", ""] as const;
+
+function TypingEllipsis() {
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setPhase((p) => (p + 1) % TYPING_DOT_PHASES.length);
+    }, 350);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="font-mono tracking-tight" aria-hidden>
+      {TYPING_DOT_PHASES[phase]}
     </span>
   );
 }
 
-TypingDots.displayName = "TypingDots";
+TypingEllipsis.displayName = "TypingEllipsis";
+
+const NARRATION_SPIN_FRAMES = ["/", "-", "\\", "|"] as const;
+
+function NarrationSpinner() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setI((x) => (x + 1) % NARRATION_SPIN_FRAMES.length);
+    }, 90);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span
+      className="inline-block min-w-[1ch] text-center font-mono"
+      aria-hidden
+    >
+      {NARRATION_SPIN_FRAMES[i]}
+    </span>
+  );
+}
+
+NarrationSpinner.displayName = "NarrationSpinner";
+
+type TypewriterBlockProps = {
+  text: string;
+  charDelayMs?: number;
+  /** Extra ms before the first character (default: same as charDelayMs). */
+  startDelayMs?: number;
+  className?: string;
+  /** When false, nothing is rendered (deferred reveal). */
+  play?: boolean;
+  onRevealComplete?: () => void;
+};
+
+function TypewriterBlock({
+  text,
+  charDelayMs = 10,
+  startDelayMs,
+  className,
+  play = true,
+  onRevealComplete,
+}: TypewriterBlockProps) {
+  const [n, setN] = useState(0);
+  const onCompleteRef = useRef(onRevealComplete);
+  const firedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    onCompleteRef.current = onRevealComplete;
+  }, [onRevealComplete]);
+
+  useLayoutEffect(() => {
+    firedRef.current = false;
+  }, [text, play]);
+
+  useLayoutEffect(() => {
+    if (!play) return;
+    if (!text) return;
+    let i = 0;
+    let id: number | undefined;
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      i += 1;
+      setN(Math.min(i, text.length));
+      if (i < text.length) {
+        id = window.setTimeout(run, charDelayMs);
+      }
+    };
+    const firstDelay =
+      startDelayMs !== undefined ? startDelayMs : charDelayMs;
+    id = window.setTimeout(run, firstDelay);
+    return () => {
+      cancelled = true;
+      if (id !== undefined) clearTimeout(id);
+    };
+  }, [text, charDelayMs, startDelayMs, play]);
+
+  useEffect(() => {
+    if (!play || !text.length) return;
+    if (n === text.length && !firedRef.current) {
+      firedRef.current = true;
+      onCompleteRef.current?.();
+    }
+  }, [n, text, play]);
+
+  if (!play) return null;
+
+  const visible = text.slice(0, n);
+  const showCursor = text.length > 0 && n < text.length;
+
+  return (
+    <span className={className}>
+      {visible}
+      {showCursor ? (
+        <span className="crt-typewriter-cursor" aria-hidden />
+      ) : null}
+    </span>
+  );
+}
+
+TypewriterBlock.displayName = "TypewriterBlock";
+
+/** When mission outcome follows a log line with action only (no narrative), unlock after paint. */
+type MissionChainUnlockProps = {
+  onUnlock: () => void;
+};
+
+function MissionChainUnlock({ onUnlock }: MissionChainUnlockProps) {
+  useLayoutEffect(() => {
+    onUnlock();
+  }, [onUnlock]);
+  return null;
+}
+
+MissionChainUnlock.displayName = "MissionChainUnlock";
+
+type EndGameConfirmDialogProps = {
+  open: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+function EndGameConfirmDialog({
+  open,
+  onCancel,
+  onConfirm,
+}: EndGameConfirmDialogProps) {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 p-4"
+      role="presentation"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="end-game-confirm-title"
+        className="crt-card max-w-sm w-full rounded-2xl border-2 p-5 shadow-none"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onCancel();
+        }}
+      >
+        <h2
+          id="end-game-confirm-title"
+          className="text-base font-semibold uppercase tracking-wide"
+        >
+          End game?
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed opacity-90">
+          {
+            "This will end the session for everyone and return to the lobby."
+          }
+        </p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-medium"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-semibold"
+            onClick={onConfirm}
+          >
+            End game
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+EndGameConfirmDialog.displayName = "EndGameConfirmDialog";
 
 type LobbyThemePickerProps = {
   labels: readonly string[];
@@ -210,7 +470,7 @@ function LobbyThemePicker({
       >
         <span className="min-w-0 truncate">{value}</span>
         <svg
-          className={`size-5 shrink-0 text-violet-500 transition-transform duration-200 dark:text-violet-400 ${open ? "rotate-180" : ""}`}
+          className={`size-5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           viewBox="0 0 20 20"
           fill="currentColor"
           xmlns="http://www.w3.org/2000/svg"
@@ -228,7 +488,7 @@ function LobbyThemePicker({
           ref={listRef}
           id={listId}
           role="listbox"
-          className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-xl border-2 border-violet-200/90 bg-white/95 py-1 shadow-xl shadow-violet-950/15 backdrop-blur-sm dark:border-violet-700/55 dark:bg-violet-950/95 dark:shadow-black/40"
+          className="crt-card absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-xl border-2 py-1 backdrop-blur-sm"
         >
           {labels.map((label, i) => {
             const selected = label === value;
@@ -240,11 +500,9 @@ function LobbyThemePicker({
                 role="option"
                 aria-selected={selected}
                 data-theme-option={i}
-                className={`mx-1 flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors select-none ${
-                  active
-                    ? "bg-violet-100 text-violet-950 dark:bg-violet-800/55 dark:text-violet-50"
-                    : "text-zinc-800 hover:bg-violet-50 dark:text-zinc-200 dark:hover:bg-violet-900/40"
-                } ${selected ? "font-semibold" : "font-medium"}`}
+                className={`mx-1 flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-transparent! px-3 py-2.5 text-left text-sm transition-colors hover:border-(--crt-soft)! hover:bg-[color-mix(in_srgb,var(--crt-panel)_70%,var(--crt-bg)_30%)] select-none ${
+                  selected ? "font-semibold" : "font-medium"
+                }`}
                 onMouseEnter={() => setHighlight(i)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pick(label)}
@@ -252,7 +510,7 @@ function LobbyThemePicker({
                 <span className="min-w-0 truncate">{label}</span>
                 {selected ? (
                   <svg
-                    className="size-4 shrink-0 text-violet-600 dark:text-violet-300"
+                    className="size-4 shrink-0"
                     viewBox="0 0 20 20"
                     fill="currentColor"
                     xmlns="http://www.w3.org/2000/svg"
@@ -276,7 +534,39 @@ function LobbyThemePicker({
 
 LobbyThemePicker.displayName = "LobbyThemePicker";
 
+const THEME_STORAGE_KEY = "blind-protocol-ui-theme";
+const THEME_CHANGE_EVENT = "blind-protocol-ui-theme-change";
+
+function readClientTheme(): UiTheme {
+  const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (savedTheme === "light" || savedTheme === "dark") {
+    return savedTheme;
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function subscribeThemeChange(onStoreChange: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key && event.key !== THEME_STORAGE_KEY) return;
+    onStoreChange();
+  };
+  const onLocalThemeChange = () => onStoreChange();
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(THEME_CHANGE_EVENT, onLocalThemeChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(THEME_CHANGE_EVENT, onLocalThemeChange);
+  };
+}
+
 function GameClient() {
+  const uiTheme = useSyncExternalStore(
+    subscribeThemeChange,
+    readClientTheme,
+    () => "dark"
+  );
   const [passcode, setPasscode] = useState("");
   const [name, setName] = useState("");
   const [isStarting, setIsStarting] = useState(false);
@@ -295,6 +585,7 @@ function GameClient() {
   const [rolePanelOpen, setRolePanelOpen] = useState(true);
   /** Local pick before confirming vote (server stores vote only after Confirm). */
   const [voteSelectionId, setVoteSelectionId] = useState<string | null>(null);
+  const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const socketRef = useRef<ReturnType<typeof createSocket> | null>(null);
   const typingIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -428,6 +719,15 @@ function GameClient() {
     };
   }, [connect]);
 
+  useEffect(() => {
+    document.documentElement.dataset.uiTheme = uiTheme;
+  }, [uiTheme]);
+
+  const handleThemeChange = (theme: UiTheme) => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+  };
+
   const handleEnter = () => {
     setError("");
     if (!passcode.trim() || !name.trim()) {
@@ -440,10 +740,6 @@ function GameClient() {
     });
   };
 
-  const handleAckSkipToVote = () => {
-    socketRef.current?.emit("ack_skip_to_vote");
-  };
-
   const confirmVote = () => {
     if (!voteSelectionId || !socketRef.current) return;
     socketRef.current.emit("vote", { targetId: voteSelectionId });
@@ -451,6 +747,7 @@ function GameClient() {
 
   const handleResetGame = () => {
     socketRef.current?.emit("reset_game");
+    setEndGameConfirmOpen(false);
   };
 
   useEffect(() => {
@@ -508,30 +805,95 @@ function GameClient() {
       roomState.phase === "end")
       ? roomState.players.find((p) => p.id === mySocketId)?.role
       : undefined;
+  const myPlayerName =
+    roomState && mySocketId
+      ? roomState.players.find((p) => p.id === mySocketId)?.name
+      : undefined;
 
   useEffect(() => {
     if (myRole) setRolePanelOpen(true);
   }, [myRole]);
 
-  const showLocalComposing = Boolean(isMyTurn && actionInput.trim().length > 0);
   const themeFieldLabelId = useId();
   const rolePanelContentId = useId();
 
-  const lobbyControlShell =
-    "w-full min-h-12 rounded-xl border-2 px-4 py-3 text-base font-medium shadow-md shadow-violet-950/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f4f0fc] dark:shadow-black/25 dark:focus-visible:ring-violet-500 dark:focus-visible:ring-offset-[#14101c]";
-  const lobbySelectClass = `${lobbyControlShell} border-violet-200/90 bg-white/90 text-zinc-900 hover:border-violet-300 hover:bg-white dark:border-violet-700/55 dark:bg-violet-950/45 dark:text-zinc-100 dark:hover:border-violet-600 dark:hover:bg-violet-950/60`;
-  const lobbyPrimaryBtnClass = `${lobbyControlShell} border-violet-400/90 bg-violet-400/95 text-violet-950 hover:border-violet-500 hover:bg-violet-300 disabled:opacity-50 dark:border-violet-500 dark:bg-violet-600 dark:text-violet-50 dark:hover:border-violet-400 dark:hover:bg-violet-500`;
-  const lobbyStartBtnClass = `${lobbyControlShell} border-emerald-400/85 bg-emerald-300 text-emerald-950 hover:border-emerald-500 hover:bg-emerald-200 disabled:opacity-50 dark:border-emerald-600 dark:bg-emerald-700 dark:text-emerald-50 dark:hover:bg-emerald-600`;
+  const logs = roomState?.logs;
+  const missionOutcomeIdx = useMemo(() => {
+    if (!logs?.length) return -1;
+    return logs.findIndex(
+      (l) =>
+        l.playerId === SYSTEM_LOG_PLAYER_ID &&
+        l.action === "[MISSION OUTCOME]"
+    );
+  }, [logs]);
 
+  const [missionChainDone, setMissionChainDone] = useState(false);
+
+  useEffect(() => {
+    /* Reset typed-chain unlock when the mission outcome row appears or is removed. */
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (missionOutcomeIdx <= 0) {
+      setMissionChainDone(true);
+    } else {
+      setMissionChainDone(false);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [missionOutcomeIdx]);
+
+  const missionOutcomeUnlocked =
+    missionOutcomeIdx <= 0 || missionChainDone;
+
+  const unlockMissionOutcome = useCallback(() => {
+    setMissionChainDone(true);
+  }, []);
+
+  const lobbyControlShell =
+    "w-full min-h-12 rounded-xl border-2 px-4 py-3 text-base font-medium transition-colors";
+  const lobbySelectClass = `${lobbyControlShell} crt-card hover:bg-[color-mix(in_srgb,var(--crt-panel)_70%,var(--crt-bg)_30%)]`;
+  /** Hover via `.crt-btn-cta` in globals — beats `.crt-card` / `.crt-ui button` !important. */
+  const lobbyPrimaryBtnClass = `${lobbyControlShell} crt-btn-cta disabled:opacity-50`;
+  const lobbyStartBtnClass = `${lobbyControlShell} crt-btn-cta disabled:opacity-50`;
+
+  /** Title only on login + lobby (hidden during play / vote / end). */
   const showGameTitle =
-    !roomState || roomState.phase !== "playing";
+    !roomState || roomState.phase === "lobby";
 
   return (
-    <section className="flex flex-col gap-6 max-w-2xl w-full p-6 items-center">
+    <section className="crt-ui flex max-w-2xl w-full flex-col items-center gap-6 p-6">
+      <header className="flex w-full items-center justify-end">
+        <div
+          className="crt-mode-toggle inline-flex items-center rounded-md border"
+          role="group"
+          aria-label="Choose light or dark theme"
+        >
+          <button
+            type="button"
+            onClick={() => handleThemeChange("light")}
+            className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
+              uiTheme === "light" ? "is-active" : ""
+            }`}
+            aria-pressed={uiTheme === "light"}
+          >
+            Light
+          </button>
+          <button
+            type="button"
+            onClick={() => handleThemeChange("dark")}
+            className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
+              uiTheme === "dark" ? "is-active" : ""
+            }`}
+            aria-pressed={uiTheme === "dark"}
+          >
+            Dark
+          </button>
+        </div>
+      </header>
       {showGameTitle ? (
-        <h1 className="text-4xl sm:text-5xl font-bold text-violet-950 dark:text-violet-100 text-center tracking-tight">
-          Blind Protocol
-        </h1>
+        <div className="crt-title-ascii-bleed self-stretch w-full min-w-0">
+          <div className="relative left-1/2 box-border w-svw max-w-svw shrink-0 -translate-x-1/2 overflow-hidden px-3 sm:px-6">
+            <BlindProtocolAsciiTitle />
+          </div>
+        </div>
       ) : null}
 
       {error && (
@@ -580,19 +942,23 @@ function GameClient() {
         </div>
       ) : roomState.phase === "lobby" ? (
         <div className="flex flex-col gap-6 w-full max-w-md items-center text-center">
+          <p className="w-full text-left text-xs font-semibold tracking-wide">
+            Players:
+          </p>
           <div className="flex flex-wrap justify-center gap-3 w-full">
             {roomState.players.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-violet-300/80 dark:border-violet-700/50 bg-white/50 dark:bg-violet-950/25 px-5 py-4 text-sm text-zinc-500 dark:text-zinc-400">
+              <div className="crt-card-muted rounded-xl border border-dashed px-5 py-4 text-sm">
                 No players yet
               </div>
             ) : (
               roomState.players.map((p) => (
                 <div
                   key={p.id}
-                  className="rounded-xl border border-violet-200/90 dark:border-violet-700/50 bg-white/90 dark:bg-violet-950/40 px-4 py-3 min-w-26 shadow-sm shadow-violet-950/5 dark:shadow-black/20"
+                  className="crt-card rounded-xl border px-4 py-3 min-w-26"
                 >
-                  <p className="text-sm font-semibold text-violet-950 dark:text-violet-100">
+                  <p className="text-sm font-semibold">
                     {p.name}
+                    {p.id === mySocketId ? " (YOU)" : ""}
                   </p>
                 </div>
               ))
@@ -646,23 +1012,27 @@ function GameClient() {
           {roomState.phase === "end" && roomState.voteOutcome ? null : (
             <p className="text-sm text-zinc-600 dark:text-zinc-400 flex w-full flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
               <span className="capitalize">Phase: {roomState.phase}</span>
-              {roomState.phase === "playing" ? (
+              {roomState.phase === "playing" &&
+              roomState.players.length > 0 ? (
                 <span className="shrink-0 text-right">
-                  Round {(roomState.roundIndex ?? 0) + 1}/3 — three turns per
-                  player
+                  Turn{" "}
+                  {(roomState.roundIndex ?? 0) * roomState.players.length +
+                    roomState.currentTurn +
+                    1}
+                  /{3 * roomState.players.length}
                 </span>
               ) : null}
             </p>
           )}
 
           {roomState.phase === "voting" && roomState.players.length > 0 ? (
-            <div className="rounded-2xl border-2 border-violet-400/80 bg-linear-to-b from-violet-100/90 to-white/90 p-5 shadow-xl dark:border-violet-600/50 dark:from-violet-950/60 dark:to-violet-950/30">
-              <h2 className="text-center text-xl font-bold text-violet-950 dark:text-violet-50">
+            <div className="crt-vote-panel rounded-2xl border-2 p-5">
+              <h2 className="text-center text-xl font-bold">
                 Vote for the Imposter
               </h2>
               {roomState.voteTieInfo ? (
                 <div
-                  className="mt-3 rounded-xl border-2 border-amber-400/70 bg-amber-50/95 px-3 py-3 text-sm text-amber-950 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-50"
+                  className="crt-vote-tie-banner mt-3 px-3 py-3 text-sm"
                   role="status"
                 >
                   <p className="font-bold">Vote tied — vote again.</p>
@@ -678,27 +1048,13 @@ function GameClient() {
               {mySocketId &&
               roomState.votes &&
               Object.hasOwn(roomState.votes, mySocketId) ? (
-                <p className="mt-3 text-center text-sm font-semibold text-violet-800 dark:text-violet-200">
+                <p className="mt-3 text-center text-sm font-semibold">
                   Your vote:{" "}
                   {roomState.players.find(
                     (x) => x.id === roomState.votes[mySocketId]
                   )?.name ?? "—"}
                 </p>
-              ) : voteSelectionId ? (
-                <p className="mt-3 text-center text-sm text-violet-800 dark:text-violet-200">
-                  Selected:{" "}
-                  <span className="font-semibold">
-                    {roomState.players.find((x) => x.id === voteSelectionId)
-                      ?.name ?? "—"}
-                  </span>
-                  {" — "}
-                  press Confirm to submit (cannot be changed).
-                </p>
-              ) : (
-                <p className="mt-3 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  Tap a name to select who you accuse as the Imposter.
-                </p>
-              )}
+              ) : null}
               <div
                 className="mt-4 grid gap-3 sm:grid-cols-2"
                 role="radiogroup"
@@ -731,12 +1087,12 @@ function GameClient() {
                           prev === p.id ? null : p.id
                         )
                       }
-                      className={`rounded-xl border-2 bg-white/95 px-4 py-5 text-center text-lg font-bold shadow-md transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-950/60 dark:text-violet-50 ${
-                        selected
-                          ? "border-violet-600 ring-2 ring-violet-500 ring-offset-2 ring-offset-violet-100 dark:border-violet-400 dark:ring-violet-400 dark:ring-offset-violet-950"
-                          : prevIsTop
-                            ? "border-amber-500/90 text-violet-950 dark:border-amber-500"
-                            : "border-violet-400/70 text-violet-950 hover:border-violet-500 hover:bg-violet-50 dark:border-violet-600/50 dark:hover:bg-violet-900/50"
+                      className={`crt-vote-target rounded-xl border-2 px-4 py-5 text-center text-lg font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        selected ? "crt-vote-target--selected" : ""
+                      } ${
+                        prevIsTop && !selected
+                          ? "crt-vote-target--tie-hint"
+                          : ""
                       }`}
                     >
                       <span className="block">{p.name}</span>
@@ -757,7 +1113,7 @@ function GameClient() {
                   type="button"
                   onClick={confirmVote}
                   disabled={!voteSelectionId}
-                  className="mt-4 w-full min-h-12 rounded-xl border-2 border-emerald-500/90 bg-emerald-400/95 px-4 py-3 text-base font-bold text-emerald-950 shadow-md hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-45 dark:border-emerald-600 dark:bg-emerald-700 dark:text-emerald-50 dark:hover:bg-emerald-600"
+                  className="crt-btn-cta mt-4 w-full min-h-12 rounded-xl border-2 px-4 py-3 text-base font-bold disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   Confirm vote
                 </button>
@@ -783,13 +1139,7 @@ function GameClient() {
                 const youLose = won === false;
                 return (
                   <div
-                    className={`rounded-2xl border-[3px] px-6 py-10 text-center ${
-                      youWin
-                        ? "border-emerald-500 bg-emerald-100/95 text-emerald-950 dark:border-emerald-500 dark:bg-emerald-950/55 dark:text-emerald-50"
-                        : youLose
-                          ? "border-rose-500 bg-rose-100/95 text-rose-950 dark:border-rose-500 dark:bg-rose-950/50 dark:text-rose-50"
-                          : "border-zinc-400 bg-zinc-100/90 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-100"
-                    }`}
+                    className="crt-hr-border px-6 py-10 text-center"
                     role="status"
                   >
                     <p className="text-4xl font-black tracking-tight sm:text-5xl">
@@ -816,29 +1166,21 @@ function GameClient() {
                   return (
                     <div
                       key={p.id}
-                      className={`rounded-xl border-2 px-4 py-4 text-center shadow-md ${
-                        isTopVote
-                          ? p.role === "imposter"
-                            ? "border-emerald-400/80 bg-emerald-50/90 text-emerald-950 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-100"
-                            : "border-fuchsia-400/80 bg-fuchsia-50/90 text-fuchsia-950 dark:border-fuchsia-700/60 dark:bg-fuchsia-950/45 dark:text-fuchsia-100"
-                          : "border-zinc-300/80 bg-zinc-200/60 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/45 dark:text-zinc-400"
+                      className={`crt-end-tally px-4 py-4 text-center ${
+                        isTopVote ? "crt-end-tally--top" : "opacity-85"
                       }`}
                     >
-                      <p
-                        className={`text-lg font-bold ${isTopVote ? "" : "text-zinc-700 dark:text-zinc-300"}`}
-                      >
-                        {p.name}
-                      </p>
+                      <p className="text-lg font-bold">{p.name}</p>
                       <p
                         className={`mt-1 text-sm font-semibold tabular-nums ${
-                          isTopVote ? "opacity-90" : "text-zinc-500 dark:text-zinc-500"
+                          isTopVote ? "" : "opacity-70"
                         }`}
                       >
                         {vCount} vote{vCount === 1 ? "" : "s"}
                       </p>
                       <p
                         className={`mt-2 text-sm font-semibold uppercase tracking-wide ${
-                          isTopVote ? "opacity-90" : "text-zinc-500 dark:text-zinc-500"
+                          isTopVote ? "" : "opacity-70"
                         }`}
                       >
                         {p.role === "imposter" ? "Imposter" : "Crew"}
@@ -862,15 +1204,9 @@ function GameClient() {
                 aria-controls={rolePanelContentId}
               >
                 <span className="shrink-0 text-[11px] font-bold tracking-wide opacity-75">
-                  You are
+                  {myPlayerName ? `${myPlayerName}. You are:` : "You are:"}
                 </span>
-                {!rolePanelOpen ? (
-                  <span className="min-w-0 flex-1 truncate text-center text-lg font-bold tracking-tight">
-                    {ROLE_COPY[myRole].title}
-                  </span>
-                ) : (
-                  <span className="min-w-0 flex-1" aria-hidden />
-                )}
+                <span className="min-w-0 flex-1" aria-hidden />
                 <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs font-semibold opacity-85">
                   {rolePanelOpen ? "Hide" : "Show"}
                   <svg
@@ -891,7 +1227,7 @@ function GameClient() {
               {rolePanelOpen ? (
                 <div
                   id={rolePanelContentId}
-                  className="border-t border-black/10 px-5 pb-5 pt-4 text-center dark:border-white/15"
+                  className="crt-role-panel-body px-5 pb-5 pt-4 text-center"
                 >
                   <p className="text-3xl font-extrabold tracking-tight sm:text-4xl">
                     {ROLE_COPY[myRole].title}
@@ -921,130 +1257,154 @@ function GameClient() {
             </div>
           ) : null}
 
-          {roomState.phase === "end" && !roomState.voteOutcome ? (
-            <p
-              className={`font-medium ${
-                isMissionWon(roomState.worldState)
-                  ? "text-emerald-700 dark:text-emerald-400"
-                  : "text-rose-600 dark:text-rose-400"
-              }`}
-              role="status"
-            >
-              {isMissionWon(roomState.worldState)
-                ? "Mission success — goal reached without breaking the rules."
-                : isRuleFailed(roomState.worldState)
-                  ? "Mission failed — a forbidden outcome triggered (rule)."
-                  : "Mission failed — goal not met or the story cannot continue."}
-            </p>
-          ) : null}
-
           {!(
             roomState.phase === "end" && roomState.voteOutcome
           ) ? (
-          <div className="rounded-lg border border-violet-200/80 dark:border-violet-800/50 bg-white/60 dark:bg-violet-950/25 p-3 text-sm">
+          <div className="crt-readable-surface rounded-lg border p-3 text-sm">
             {roomState.situation ? (
               <div className="mb-3">
-                <p className="font-medium mb-1 text-violet-900 dark:text-violet-200">
+                <p className="mb-1 font-medium">
                   Situation
                 </p>
-                <p className="text-zinc-800 dark:text-zinc-200">
-                  {roomState.situation}
+                <p>
+                  <TypewriterBlock
+                    key={roomState.situation}
+                    text={roomState.situation}
+                    charDelayMs={8}
+                  />
                 </p>
               </div>
             ) : null}
             <div
               className={
                 roomState.situation
-                  ? "border-t border-violet-200/70 dark:border-violet-800/50 pt-3"
+                  ? "border-t border-(--crt-border) pt-3"
                   : ""
               }
             >
-              <h2 className="text-base font-semibold text-violet-900 dark:text-violet-200">
+              <h2 className="text-base font-semibold">
                 Log
               </h2>
-              {(remoteTypingNames.length > 0 || showLocalComposing) && (
+              {remoteTypingNames.length > 0 ? (
                 <p
-                  className="text-xs text-violet-700/90 dark:text-violet-300/90 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"
+                  className="crt-typing-indicator mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs"
                   aria-live="polite"
                 >
-                  {showLocalComposing && (
-                    <span className="inline-flex items-center gap-1">
-                      You are typing
-                      <TypingDots />
-                    </span>
-                  )}
-                  {remoteTypingNames.length > 0 && (
-                    <span className="inline-flex items-center gap-1">
-                      {remoteTypingNames.join(", ")} typing
-                      <TypingDots />
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1">
+                    <span>{remoteTypingNames.join(", ")}</span>
+                    <TypingEllipsis />
+                    <span className="sr-only">typing</span>
+                  </span>
                 </p>
-              )}
-              <div className="mt-2 max-h-48 overflow-y-auto rounded-md bg-white/40 dark:bg-violet-950/15 p-2">
+              ) : null}
+              <div className="mt-2 max-h-48 overflow-y-auto py-1">
                 {roomState.logs.length === 0 && !beatPending && !gmThinking ? (
-                  <p className="text-zinc-500 dark:text-zinc-400">No actions yet.</p>
+                  <p className="opacity-70">No actions yet.</p>
                 ) : (
                   <>
-                    {roomState.logs.map((log, i) => (
-                      <div key={i} className="mb-3 last:mb-0">
-                        <p className="font-medium text-zinc-900 dark:text-zinc-100">
-                          {log.action}
-                        </p>
-                        {log.narrative && (
-                          <div className="mt-1.5 pl-2 border-l-2 border-emerald-300/90 dark:border-emerald-600/70">
-                            <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 mb-0.5">
-                              Narration
-                            </p>
-                            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                              {log.narrative}
+                    {roomState.logs.map((log, i) => {
+                      const isMissionOutcome =
+                        log.playerId === SYSTEM_LOG_PLAYER_ID &&
+                        log.action === "[MISSION OUTCOME]";
+                      if (isMissionOutcome) {
+                        if (!missionOutcomeUnlocked) return null;
+                        const won = isMissionWon(roomState.worldState);
+                        return (
+                          <div
+                            key={`${i}-mission`}
+                            className="mb-4 mt-10 w-full last:mb-0 sm:mt-12"
+                            role="status"
+                          >
+                            <p
+                              className={`w-full text-center font-medium ${
+                                won
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-rose-600 dark:text-rose-400"
+                              }`}
+                            >
+                              <TypewriterBlock
+                                key={log.narrative ?? "mission"}
+                                text={log.narrative ?? ""}
+                                charDelayMs={10}
+                                startDelayMs={550}
+                                className="inline-block max-w-full text-center"
+                              />
                             </p>
                           </div>
-                        )}
-                      </div>
-                    ))}
-                    {beatPending && (
+                        );
+                      }
+                      const chainFromThis =
+                        missionOutcomeIdx > 0 && i === missionOutcomeIdx - 1;
+                      return (
+                        <div key={i} className="mb-4 last:mb-0">
+                          <p className="font-medium">{log.action}</p>
+                          {chainFromThis && !log.narrative ? (
+                            <MissionChainUnlock
+                              onUnlock={unlockMissionOutcome}
+                            />
+                          ) : null}
+                          {log.narrative ? (
+                            <div className="mt-1.5">
+                              <p className="mb-0.5 text-xs font-semibold">
+                                Narration
+                              </p>
+                              <p className="text-sm opacity-85">
+                                <TypewriterBlock
+                                  key={`${i}-n-${log.narrative}`}
+                                  text={log.narrative}
+                                  charDelayMs={10}
+                                  onRevealComplete={
+                                    chainFromThis
+                                      ? unlockMissionOutcome
+                                      : undefined
+                                  }
+                                />
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                    {beatPending ? (
                       <div className="mb-2">
-                        <p className="font-medium text-zinc-900 dark:text-zinc-100">
-                          {beatPending.actionLine}
-                        </p>
-                        {gmThinking && (
-                          <p
-                            className="mt-2 text-sm text-violet-700 dark:text-violet-300 inline-flex items-center"
-                            aria-live="polite"
-                          >
-                            <span className="font-medium">Narration</span>
-                            <TypingDots />
-                          </p>
-                        )}
+                        <p className="font-medium">{beatPending.actionLine}</p>
+                        {gmThinking ? (
+                          <div className="mt-1.5">
+                            <p className="mb-0.5 text-xs font-semibold">
+                              Narration
+                            </p>
+                            <p
+                              className="text-sm opacity-85 inline-flex min-h-[1.25em] flex-wrap items-baseline gap-x-1.5"
+                              aria-live="polite"
+                            >
+                              <NarrationSpinner />
+                              <span className="sr-only">
+                                Generating narration
+                              </span>
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
-                    )}
-                    {gmThinking && !beatPending && (
-                      <p
-                        className="text-sm text-violet-700 dark:text-violet-300 flex items-center gap-1"
-                        aria-live="polite"
-                      >
-                        <span className="font-medium">Narration</span>
-                        <TypingDots />
-                      </p>
-                    )}
+                    ) : null}
+                    {gmThinking && !beatPending ? (
+                      <div className="mb-2">
+                        <p className="mb-0.5 text-xs font-semibold">
+                          Narration
+                        </p>
+                        <p
+                          className="text-sm opacity-85 inline-flex min-h-[1.25em] flex-wrap items-baseline gap-x-1.5"
+                          aria-live="polite"
+                        >
+                          <NarrationSpinner />
+                          <span className="sr-only">Generating narration</span>
+                        </p>
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
             </div>
           </div>
-          ) : null}
-
-          {roomState.phase === "playing" &&
-          Object.keys(roomState.worldState ?? {}).length > 0 ? (
-            <details className="text-sm text-zinc-700 dark:text-zinc-300">
-              <summary className="cursor-pointer text-violet-800 dark:text-violet-300">
-                World state
-              </summary>
-              <pre className="mt-1 p-2 rounded-lg border border-violet-200/60 dark:border-violet-800/40 bg-white/50 dark:bg-violet-950/20 overflow-x-auto">
-                {JSON.stringify(roomState.worldState, null, 2)}
-              </pre>
-            </details>
           ) : null}
 
           {roomState.phase === "playing" && (
@@ -1079,7 +1439,7 @@ function GameClient() {
                   placeholder={isMyTurn ? "Your action…" : "Waiting for your turn…"}
                   disabled={!isMyTurn}
                   maxLength={MAX_PLAYER_ACTION_LENGTH}
-                  className={`w-full border border-violet-200 dark:border-violet-800/60 py-2 rounded-lg bg-white/80 dark:bg-violet-950/30 text-zinc-900 dark:text-zinc-100 ${
+                  className={`crt-action-input w-full rounded-lg border-2 border-violet-200 py-2 text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-zinc-100 ${
                     isMyTurn ? "pl-3 pr-14" : "px-3"
                   }`}
                   aria-describedby={
@@ -1100,81 +1460,48 @@ function GameClient() {
                 type="button"
                 onClick={handleAction}
                 disabled={!isMyTurn || !actionInput.trim()}
-                className="shrink-0 self-stretch px-4 py-2 rounded-lg font-medium bg-emerald-300 text-emerald-950 hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-700 dark:text-emerald-50 dark:hover:bg-emerald-600"
+                className="crt-btn-cta shrink-0 self-stretch rounded-lg px-4 py-2 font-medium disabled:opacity-50"
               >
                 Send
               </button>
             </div>
           )}
 
+          {roomState.phase === "playing" &&
+          Object.keys(roomState.worldState ?? {}).length > 0 ? (
+            <details className="text-sm text-zinc-700 dark:text-zinc-300">
+              <summary className="cursor-pointer text-violet-800 dark:text-violet-300">
+                World state
+              </summary>
+              <pre className="mt-1 p-2 rounded-lg border border-violet-200/60 dark:border-violet-800/40 bg-white/50 dark:bg-violet-950/20 overflow-x-auto">
+                {JSON.stringify(roomState.worldState, null, 2)}
+              </pre>
+            </details>
+          ) : null}
+
           {!(
             roomState.phase === "end" && roomState.voteOutcome
           ) ? (
-            <div className="flex flex-col gap-2 pt-2 border-t border-violet-200/50 dark:border-violet-800/30">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Players
-                </span>
-                {roomState.phase === "playing" &&
-                roomState.players.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={handleAckSkipToVote}
-                    disabled={
-                      !mySocketId ||
-                      (roomState.skipToVotePlayerIds ?? []).includes(
-                        mySocketId
-                      ) ||
-                      gmThinking ||
-                      Boolean(beatPending)
-                    }
-                    aria-label="Confirm skip to voting phase; all players must confirm"
-                    className="rounded-lg border border-violet-300/80 bg-violet-100/80 px-2.5 py-1 text-[11px] font-medium text-violet-900 hover:bg-violet-200/80 disabled:cursor-not-allowed disabled:opacity-45 dark:border-violet-700/50 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-900/50"
-                  >
-                    Skip to vote
-                  </button>
-                ) : null}
-              </div>
-              {roomState.phase === "playing" &&
-              roomState.players.length > 0 ? (
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {(roomState.skipToVotePlayerIds ?? []).length}/
-                  {roomState.players.length} ready — everyone must confirm
-                </p>
-              ) : null}
+            <div className="flex flex-col gap-2 border-t border-violet-200/50 pt-2 dark:border-violet-800/30">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                Players
+              </span>
               <div className="flex flex-wrap gap-1.5">
                 {roomState.players.length === 0 ? (
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
                     —
                   </span>
                 ) : (
-                  roomState.players.map((p) => {
-                    const voted = (
-                      roomState.skipToVotePlayerIds ?? []
-                    ).includes(p.id);
-                    return (
-                      <div
-                        key={p.id}
-                        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${
-                          voted
-                            ? "border-emerald-300/70 bg-emerald-50/50 dark:border-emerald-800/40 dark:bg-emerald-950/25"
-                            : "border-zinc-200/70 dark:border-zinc-700/40"
-                        }`}
-                      >
-                        {voted ? (
-                          <span
-                            className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400"
-                            aria-hidden
-                          >
-                            ✓
-                          </span>
-                        ) : null}
-                        <span className="text-[11px] font-normal leading-tight text-zinc-500 dark:text-zinc-500">
-                          {p.name}
-                        </span>
-                      </div>
-                    );
-                  })
+                  roomState.players.map((p) => (
+                    <div
+                      key={p.id}
+                      className="inline-flex items-center rounded-md border border-zinc-200/70 px-1.5 py-0.5 dark:border-zinc-700/40"
+                    >
+                      <span className="text-[11px] font-normal leading-tight text-zinc-500 dark:text-zinc-500">
+                        {p.name}
+                      </span>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -1186,15 +1513,20 @@ function GameClient() {
             <div className="flex w-full justify-center border-t border-violet-200/50 pt-4 dark:border-violet-800/30">
               <button
                 type="button"
-                onClick={handleResetGame}
-                className="rounded-lg border border-rose-300/90 bg-rose-100/90 px-4 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-200/90 dark:border-rose-800/60 dark:bg-rose-950/50 dark:text-rose-100 dark:hover:bg-rose-900/50"
+                onClick={() => setEndGameConfirmOpen(true)}
+                className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-semibold"
               >
-                End game — reset room
+                End game
               </button>
             </div>
           )}
         </div>
       )}
+      <EndGameConfirmDialog
+        open={endGameConfirmOpen}
+        onCancel={() => setEndGameConfirmOpen(false)}
+        onConfirm={handleResetGame}
+      />
     </section>
   );
 }

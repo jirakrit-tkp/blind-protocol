@@ -30,6 +30,9 @@ export const GOAL_POLICE_SUMMONED = "goal_police_summoned" as const;
  */
 export const MISSION_SUCCESS = "mission_success" as const;
 
+/** Set by `%SUCCESS%` / `%FAIL%` player commands — ends mission without LLM. */
+export const SYSTEM_FORCED_OUTCOME = "system_forced_outcome" as const;
+
 function isAffirmative(v: unknown): boolean {
   return v === "yes" || v === true;
 }
@@ -58,6 +61,31 @@ function hasGoalSucceeded(ws: WorldState): boolean {
  * เช็ค isMissionWon ก่อนถือว่าแพ้จากความตาย / หมดรอบ ฯลฯ (docs/scenario-design.md)
  */
 export function isMissionWon(ws: WorldState): boolean {
+  const forced = ws[SYSTEM_FORCED_OUTCOME];
+  if (forced === "success") return true;
+  if (forced === "fail") return false;
   if (isRuleFailed(ws)) return false;
   return hasGoalSucceeded(ws);
+}
+
+/** Single-line summary when the mission round ends (before imposter vote). */
+export function getMissionOutcomeLine(ws: WorldState): string {
+  const forced = ws[SYSTEM_FORCED_OUTCOME];
+  if (forced === "success") {
+    return "Mission success — goal reached without breaking the rules.";
+  }
+  if (forced === "fail") {
+    return "Mission failed — goal not met or the story cannot continue.";
+  }
+  if (isMissionWon(ws)) {
+    return "Mission success — goal reached without breaking the rules.";
+  }
+  if (isRuleFailed(ws)) {
+    return "Mission failed — a forbidden outcome triggered (rule).";
+  }
+  return "Mission failed — goal not met or the story cannot continue.";
+}
+
+export function isForcedMissionFail(ws: WorldState): boolean {
+  return ws[SYSTEM_FORCED_OUTCOME] === "fail";
 }
