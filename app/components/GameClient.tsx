@@ -954,6 +954,7 @@ function GameClient() {
               uiTheme === "light" ? "is-active" : ""
             }`}
             aria-pressed={uiTheme === "light"}
+            suppressHydrationWarning
           >
             Light
           </button>
@@ -964,6 +965,7 @@ function GameClient() {
               uiTheme === "dark" ? "is-active" : ""
             }`}
             aria-pressed={uiTheme === "dark"}
+            suppressHydrationWarning
           >
             Dark
           </button>
