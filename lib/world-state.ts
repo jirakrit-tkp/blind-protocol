@@ -23,7 +23,8 @@ export function isSystemProtagonistDead(ws: WorldState): boolean {
 }
 
 /** ตัวอย่างคีย์ใน scenario ร้านทอง — ใช้อ้างอิงใน data/scenarios.json */
-export const GOAL_POLICE_SUMMONED = "goal_police_summoned" as const;
+export const GOAL_CRISIS_RESOLVED_WITHOUT_LOOT_LOSS =
+  "goal_crisis_resolved_without_loot_loss" as const;
 
 /**
  * เมื่อ scenario ไม่ได้แยก goal_* ไว้ครบ — GM ตั้งเป็น yes เมื่อชนะตามเรื่อง (เช่น ชนะทาง rules ที่ไม่ได้ map เป็น goal)

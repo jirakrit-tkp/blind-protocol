@@ -2,15 +2,13 @@ import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import type { WorldState } from "./types";
-import { THEME_LABELS } from "./theme-catalog";
+import { isValidScenarioThemeTags } from "./scenario-theme-tags";
 import { SYSTEM_PROTAGONIST_ALIVE, defaultSystemWorldState } from "./world-state";
 
 const libDir = dirname(fileURLToPath(import.meta.url));
 
-const validThemeTags = new Set(THEME_LABELS);
-
 type ScenarioFileEntry = {
-  /** แท็กธีมจาก data/themes.json (label) อย่างน้อย 1 รายการ */
+  /** แท็กธีมจาก scenario (สตริงไทยหรืออื่น ๆ) อย่างน้อย 1 รายการ */
   themes: string[];
   situation: string;
   worldState: WorldState;
@@ -31,14 +29,11 @@ function isValidScenarioEntry(s: unknown): s is ScenarioFileEntry {
   const o = s as Record<string, unknown>;
   if (typeof o.situation !== "string" || o.situation.trim().length === 0) return false;
   if (!o.worldState || typeof o.worldState !== "object") return false;
-  if (!Array.isArray(o.themes) || o.themes.length === 0) return false;
-  for (const tag of o.themes) {
-    if (typeof tag !== "string" || !validThemeTags.has(tag)) {
-      console.warn(
-        `[scenario-pool] skip: invalid or unknown theme tag "${String(tag)}" (must exist in data/themes.json)`
-      );
-      return false;
-    }
+  if (!isValidScenarioThemeTags(o.themes)) {
+    console.warn(
+      "[scenario-pool] skip: themes must be a non-empty array of non-empty strings"
+    );
+    return false;
   }
   return true;
 }
@@ -72,7 +67,7 @@ function matchesTheme(entry: ScenarioFileEntry, theme: string): boolean {
   return entry.themes.some((tag) => tag === t);
 }
 
-/** แท็กธีมจาก data/scenarios.json (ไม่ซ้ำ เรียงตาม locale) — ใช้สำหรับ UI / ตรวจ server */
+/** แท็กธีมจาก pool ที่โหลดได้ (ไม่ซ้ำ เรียงตาม locale) — ใช้สำหรับ UI / ตรวจ server */
 export function getThemeLabelsFromScenarioPool(): string[] {
   const pool = loadPool();
   const set = new Set<string>();

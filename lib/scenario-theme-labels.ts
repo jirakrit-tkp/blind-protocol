@@ -1,7 +1,5 @@
 import raw from "../data/scenarios.json";
-import { THEME_LABELS } from "./theme-catalog";
-
-const validThemeTags = new Set(THEME_LABELS);
+import { isValidScenarioThemeTags } from "./scenario-theme-tags";
 
 /** สอดคล้องกับการกรองใน lib/scenario-pool.ts (รายการที่โหลดไม่ได้จะไม่มีธีมในรายการนี้) */
 function isValidScenarioRow(s: unknown): boolean {
@@ -9,11 +7,7 @@ function isValidScenarioRow(s: unknown): boolean {
   const o = s as Record<string, unknown>;
   if (typeof o.situation !== "string" || o.situation.trim().length === 0) return false;
   if (!o.worldState || typeof o.worldState !== "object") return false;
-  if (!Array.isArray(o.themes) || o.themes.length === 0) return false;
-  for (const tag of o.themes) {
-    if (typeof tag !== "string" || !validThemeTags.has(tag)) return false;
-  }
-  return true;
+  return isValidScenarioThemeTags(o.themes);
 }
 
 /**

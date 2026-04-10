@@ -2,11 +2,11 @@
   "scenarios": [
     {
       "themes": ["อาชญากรรม", "เมือง", "ระทึก"],
-      "situation": "เราเป็นเจ้าของร้านทอง เปิดร้านตามปกติ แล้วโจรก็เข้ามาในห้องขาย ไม่มีลูกค้าคนอื่น มีแต่ภัยคุกคามชัดตรงหน้า เสียงก้าวกับปืนในมือท่าทีกดดัน ข้างนอกได้ยินเสียงรถผ่านถนนราวกับไม่มีอะไรเกิดขึ้น ในร้านไฟสว่าง ทองหลังกระจกโชว์ที่ยังไม่แตก ประตูตู้โชว์ปิด กระจกหน้าร้านยังสมบูรณ์ ห้องเซฟล็อก ทางหลังกับห้องหลังปิดสนิท โทรศัพท์อยู่บนเคาน์เตอร์ ปุ่มแจ้งเหตุใต้เคาน์เตอร์ยังไม่ได้กด ระบบแจ้งเหตุยังเงียบ โจรยังไม่ได้เอาทองหนีไป เราต้องไม่ให้โจรเอาทองไปได้ และเรียกตำรวจให้เร็วที่สุด",
+      "situation": "เราเป็นเจ้าของร้านทอง เปิดร้านตามปกติ แล้วโจรก็เข้ามาในห้องขาย ไม่มีลูกค้าคนอื่น มีแต่ภัยคุกคามชัดตรงหน้า เสียงก้าวกับปืนในมือท่าทีกดดัน ข้างนอกได้ยินเสียงรถผ่านถนนราวกับไม่มีอะไรเกิดขึ้น ในร้านไฟสว่าง ทองหลังกระจกโชว์ที่ยังไม่แตก ประตูตู้โชว์ปิด กระจกหน้าร้านยังสมบูรณ์ ห้องเซฟล็อก ทางหลังกับห้องหลังปิดสนิท โทรศัพท์อยู่บนเคาน์เตอร์ ปุ่มแจ้งเหตุใต้เคาน์เตอร์ยังไม่ได้กด ระบบแจ้งเหตุยังเงียบ โจรยังไม่ได้เอาทองหนีไป ภารกิจของเราคือจบวิกฤตนี้โดยที่การปล้นไม่สำเร็จ — ทรัพย์ในร้านยังไม่ถูกโจรพรากไปได้โดยสมบูรณ์ ไม่ว่าจะด้วยการไล่โจรให้ออกไป ให้เจ้าหน้าที่เข้ามาคุมสถานการณ์จนภัยสิ้น หรือวิธีอื่นที่ทำให้ร้านปลอดภัยจริง ไม่ใช่แค่แจ้งเหตุหรือโทรออกไปแล้วจบ",
       "worldState": {
         "system_protagonist_alive": "yes",
         "rule_robbers_escaped_with_loot": "no",
-        "goal_police_summoned": "no",
+        "goal_crisis_resolved_without_loot_loss": "no",
         "robbers_perceived_demeanor": "agitated",
         "robbers_presence": "inside_sales_floor",
         "robbers_visible_threat": "firearm_visible",
@@ -26,203 +26,881 @@
       }
     },
     {
-      "themes": ["อวกาศ", "ไซไฟ", "ระทึก"],
-      "situation": "เราอยู่ในโมดูลอยู่อาศัยของสถานีวงโคจร ไฟฉุกเฉินสลับแดงกับขาว เสียงสัญญาณเตือนดังแผ่วแต่ไม่หยุด บนจอสถานะเห็นค่าความดันโมดูลลดลงเรื่อย ๆ รอยรั่วเล็กบนท่อเหนือหัวมีหยดละอองลอย แผงควบคุมแสดงว่าประตูสู่ทางเดินหลักยังล็อกจากระบบ ช่องสื่อสารฉุกเฉินยังไม่ขึ้นว่ามีการรับสายจากพื้นฐาน ข้างนอกหน้าตูดูเหมือนความมืดของอวกาศธรรมดา เราต้องไม่ให้เกิดการแตกของโมดูลจนผู้คนในส่วนนี้ถูกดูดออกไป และต้องส่งสัญญาณขอความช่วยเหลือให้ฐานรับรู้แน่นอน",
+      "themes": ["เมือง", "สืบสวน"],
+      "situation": "เราเป็นพนักงานเวรเปลของโรงพยาบาลรัฐ ช่วงดึกโถงทางเดินชั้นล่างเงียบผิดปกติ กลิ่นน้ำยาฆ่าเชื้อแรง ไฟฟลูออเรสเซนต์กระพริบเป็นจังหวะ ที่เคาน์เตอร์เวชระเบียนมีแฟ้มกองอยู่และหน้าจอคอมพิวเตอร์ยังล็อกอยู่ จู่ ๆ ได้ยินเสียงฝีเท้าวิ่งและเสียงหอบจากทางออกฉุกเฉิน คนสวมเสื้อคลุมพยาบาลที่เราไม่คุ้นหน้ากระชากประตูห้องเก็บยาและยัดกล่องยาใส่กระเป๋าผ้า เราเห็นป้ายกล้องวงจรปิดเหนือหัว แต่ไฟแสดงสถานะกล้องดวงหนึ่งดับอยู่ ภารกิจของเราคือหยุดการขโมยยาควบคุมและคืนยาให้อยู่ภายใต้การดูแลของโรงพยาบาล — ยาควบคุมต้องไม่ถูกพาออกจากอาคารครบชุดโดยคนร้าย และสถานการณ์ต้องจบลงด้วยการที่คนร้ายถูกกันไว้หรือถูกส่งมอบให้เจ้าหน้าที่จนภัยสิ้น ไม่ใช่แค่เรากดแจ้งเหตุหรือโทรออกไปแล้วจบ",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_module_decompression_cascade": "no",
-        "goal_distress_acknowledged_by_command": "no",
-        "station_alarm_audible": "intermittent",
-        "station_comms_emergency_channel": "idle_no_ack",
-        "station_corridor_airlock_to_spine": "locked_by_system",
-        "station_leak_visible": "yes_mist_from_pipe",
-        "station_pressure_trend": "falling_slowly",
-        "station_viewport_exterior": "dark_space_visible",
-        "station_emergency_lights": "on_rotating"
+        "rule_thief_escaped_with_controlled_meds": "no",
+        "goal_controlled_meds_recovered_and_intruder_stopped": "no",
+        "hospital_floor": "ground",
+        "hospital_corridor_lights": "flickering",
+        "hospital_antiseptic_smell": "strong",
+        "hospital_pharmacy_store_room_door": "forced_open",
+        "hospital_emergency_exit": "ajar",
+        "hospital_cctv_indicator_main": "on",
+        "hospital_cctv_indicator_side": "off",
+        "intruder_disguise": "nurse_scrubs",
+        "intruder_presence": "near_pharmacy",
+        "intruder_visible_object": "cloth_bag"
       }
     },
     {
-      "themes": ["เรือดำน้ำ", "ดิ้นรน", "ระทึก"],
-      "situation": "เราอยู่ห้องควบคุมเรือดำน้ำลึกใต้น้ำ เสียงเครื่องยนต์ผิดจังหวะกับเสียงน้ำกระทบลำเรือที่ดังขึ้น มาตรวัดความลึกกระตุก แผงแสดงว่าระบบถ่วงน้ำหนักมีข้อผิดพลาด ประตูกั้นห้องเครื่องยังปิดสนิท ไฟฉุกเฉินสีแดงสาดพื้น ไม่มีเสียงตอบจากกะลาสีคนอื่นตามช่องภายใน เราต้องไม่ให้เรือจมลงสู่ความลึกที่กู้ไม่ทัน และต้องเริ่มขั้นตอนขึ้นผิวฉุกเฉินให้สำเร็จจริง",
+      "themes": ["อาชญากรรม", "ระทึก"],
+      "situation": "เราเป็นคนขับแท็กซี่กะดึก จอดรอผู้โดยสารหน้าสถานีรถไฟฟ้า ฝนปรอยทำให้กระจกหน้ามัวและเสียงน้ำหยดดังเป็นจังหวะ ผู้โดยสารชายขึ้นมานั่งเบาะหลังแล้วสั่งให้ขับทันที น้ำเสียงเร่งร้อน มือเขากดอะไรบางอย่างใต้เสื้อแจ็กเก็ตจนเห็นสันโลหะวาว ๆ ในกระจกมองหลัง เขาสั่งให้เลี้ยวเข้าซอยแคบที่ไฟถนนดับครึ่งหนึ่ง และขู่ไม่ให้เราหยุดหรือเรียกใคร ภารกิจของเราคือเอาตัวรอดและทำให้สถานการณ์จบลงโดยไม่มีใครถูกทำร้าย — เราต้องยังขับรถและควบคุมรถได้ และการคุกคามต้องหมดไปจนปลอดภัยจริง ไม่ว่าจะด้วยการหลุดพ้น การได้รับความช่วยเหลือ หรือการที่ผู้โดยสารถูกปลดอาวุธหรือถูกควบคุมจนภัยสิ้น ไม่ใช่แค่เราเลี้ยวหนีแล้วจบโดยไม่รู้ว่าปลายทางเป็นอย่างไร",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_submarine_crush_depth_breached": "no",
-        "goal_emergency_blow_surface_sequence_complete": "no",
-        "sub_alarm_audible": "yes_hull_stress",
-        "sub_ballast_status": "fault_reported",
-        "sub_bridge_intercom": "no_reply_from_other_compartments",
-        "sub_depth_gauge": "oscillating",
-        "sub_engine_note": "irregular",
-        "sub_engine_room_door": "closed_sealed",
-        "sub_emergency_lights": "on_red"
+        "rule_driver_incapacitated_or_crashed": "no",
+        "goal_passenger_threat_ended_and_driver_safe": "no",
+        "taxi_engine": "running",
+        "taxi_dashcam_status": "recording",
+        "taxi_backseat_passenger_presence": "one",
+        "passenger_perceived_demeanor": "coercive",
+        "passenger_visible_threat": "metal_object_under_jacket",
+        "street_weather": "light_rain",
+        "street_visibility": "low",
+        "alley_streetlights": "partial_outage"
       }
     },
     {
-      "themes": ["สยองขวัญ", "ลึกลับ", "เมือง"],
-      "situation": "เราอยู่ในตึกเก่าที่ปิดซ่อม บันไดไม้ดังเอี๊ยดเมื่อเราเคลื่อนที่ หน้าต่างบานใหญ่ปิดแต่กระจกแตกเป็นรอยยาว ลมจากช่องรั่วทำให้ผ้าม่านไหว บนกำแพงมีวงเวทย์วาดด้วยชอล์กยังไม่ถูกลบ ประตูทางออกหลักเปิดค้างเล็กน้อยแต่ด้านนอกมืดจนมองไม่เห็นทาง ได้ยินเสียงกระซิบจากชั้นบนแต่ไม่เห็นคน เราต้องไม่ให้พิธีในวงนั้นถูกปิดจบจนมีอะไรเข้ามาอยู่ในตัวเราได้ และต้องออกจากอาคารนี้พร้อมล็อกประตูหลักให้แน่นก่อนเที่ยงคืน",
+      "themes": ["ภัยพิบัติ", "เอาชีวิตรอด", "เมือง"],
+      "situation": "เราอยู่ในคอนโดชั้นสิบหกตอนเช้าตรู่ ได้ยินเสียงปะทุจากห้องข้าง ๆ แล้วควันสีเทาก็เลื้อยออกมาผ่านช่องประตู กลิ่นพลาสติกร้อนแสบคอ สัญญาณเตือนไฟไหม้ร้องดังไปทั้งชั้น แต่ไฟทางเดินบางดวงดับ เหลือไฟฉุกเฉินสีแดง สปริงเกลอร์เหนือหัวเริ่มพ่นน้ำเป็นฝอย พื้นลื่น และได้ยินเสียงคนตะโกนจากบันไดหนีไฟว่าควันลงมาเร็ว ภารกิจของเราคือพาตัวเองออกจากชั้นนี้ไปยังอากาศโปร่งและจุดรวมพลอย่างปลอดภัย — เราต้องไม่หมดสติจากควันหรือถูกไฟกับเศษซากขวางทาง และต้องออกถึงพื้นที่ที่หายใจสะดวกและยืนยันได้ว่าปลอดภัยจริง ไม่ใช่แค่เราโทรแจ้งแล้วยืนรอในที่อับ",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_entity_invited_or_bound_to_protagonist": "no",
-        "goal_exit_building_main_door_sealed_behind": "no",
-        "bldg_chalk_circle_on_wall": "intact_unbroken",
-        "bldg_front_door": "ajar_slightly",
-        "bldg_upper_floor_sounds": "whispers_audible",
-        "bldg_window_glass": "cracked_not_fallen",
-        "bldg_interior_light": "dim_from_street_only",
-        "bldg_clock_visible": "before_midnight"
+        "rule_smoke_inhalation_incapacitation": "no",
+        "goal_evacuated_to_safe_zone": "no",
+        "condo_floor_number": 16,
+        "condo_hallway_visibility": "poor",
+        "condo_emergency_lights": "red_glow",
+        "condo_alarm": "sounding",
+        "condo_sprinkler": "on",
+        "condo_floor_surface": "slippery",
+        "neighbor_unit_door_gap_smoke": "heavy",
+        "stairwell_door": "accessible",
+        "elevator_status": "disabled"
       }
     },
     {
-      "themes": ["ลึกลับ", "เมือง", "ละคร"],
-      "situation": "เราเป็นนักข่าวอิสระ นัดสัมภาษณ์แหล่งข่าวในห้องโถงโรงแรมเก่า โต๊ะสองฝั่ง แฟ้มเอกสารวางกลางยังไม่ถูกเปิด กล้องบันทึกเสียงของเราวางอยู่แต่ยังไม่กดอัด ทางเดินด้านนอกมีแขกผ่านไปมาเบา ๆ ประตูห้องปิด มีเสียงเคาะหนึ่งครั้งแล้วเงียบ เราต้องไม่ให้หลักฐานในแฟ้มถูกทำลายหรือหายไปก่อนส่งมอบ และต้องส่งชุดหลักฐานไปยังบรรณาธิการให้ได้รับยืนยันว่ารับแล้ว",
+      "themes": ["เทคโนโลยี", "เมือง", "ระทึก"],
+      "situation": "เราเป็นช่างไอทีของอาคารสำนักงาน เข้าห้องเซิร์ฟเวอร์ตอนเย็น ไฟหน้าตู้แร็กกระพริบถี่ผิดปกติ พัดลมร้องดัง กลิ่นอิเล็กทรอนิกส์ร้อนลอยมา และจอแสดงว่าอุณหภูมิขึ้นสูงเร็ว ที่พื้นมีแอ่งน้ำใส ๆ ใต้ท่อเหนือหัว ถ้าไฟฟ้าลัดวงจร ระบบความปลอดภัยทั้งอาคารจะล้ม ภารกิจของเราคือหยุดเหตุขัดข้องนี้ก่อนระบบดับถาวร — ความร้อนและไฟฟ้าต้องถูกควบคุมจนเซิร์ฟเวอร์กลับมาเสถียรและอาคารไม่เสี่ยงไฟใหญ่ ไม่ใช่แค่เราปิดแอร์แล้วเดินออกไป",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_key_evidence_destroyed_or_taken": "no",
-        "goal_evidence_handoff_confirmed_by_editor": "no",
-        "hotel_room_door": "closed",
-        "hotel_corridor_foot_traffic": "light_audible",
-        "hotel_dossier_folder": "sealed_on_table",
-        "hotel_recorder": "armed_not_recording",
-        "hotel_knock_at_door": "single_then_silence"
+        "rule_datacenter_shutdown": "no",
+        "goal_datacenter_stabilized_and_power_safe": "no",
+        "datacenter_rack_leds": "rapid_blink",
+        "datacenter_fan_noise": "loud",
+        "datacenter_temperature_trend": "rising_fast",
+        "datacenter_floor_puddle": "present",
+        "datacenter_overhead_pipe_leak": "dripping",
+        "datacenter_door_access": "keycard_lock",
+        "building_power_grid": "unstable",
+        "hvac_zone_status": "partial_failure"
       }
     },
     {
-      "themes": ["แฟนตาซี", "ลึกลับ", "ผจญภัย"],
-      "situation": "เราอยู่ในห้องใต้ดินของวิหาร แท่นหินกลางห้องมีคริสตัลคุมพลังเรืองแสงสีฟ้าอ่อน วงอักขระบนพื้นยังสว่างไม่เต็มเส้น ชั้นวางหนังสือโบราณเปิดค้างที่หน้าพิธีกรรม ประตูเหล็กหนาที่ขึ้นห้องบนปิดและมีกุญแจเสียบอยู่ ได้ยินเสียงคล้ายกรงเล็บขูดจากอีกฟากของประตู เราต้องไม่ให้ผนึกแตกจนสิ่งข้างนอกเข้ามาได้ และต้องทำพิธีผนึกให้เสร็จสมบูรณ์ตามตำรา",
+      "themes": ["อาชญากรรม", "สืบสวน", "เมือง"],
+      "situation": "เราเป็นเจ้าหน้าที่รักษาความปลอดภัยห้างสรรพสินค้า ช่วงปิดห้างไฟหรี่ เหลือเสียงแอร์ฮัมยาว ๆ เราเดินตรวจหน้าร้านเครื่องใช้ไฟฟ้าแล้วเห็นประตูหลังร้านแง้มอยู่ทั้งที่ควรล็อก มีรอยงัดที่ลูกบิด และได้ยินเสียงพลาสติกเสียดสีกับโลหะจากด้านใน ผ่านกระจกมืด ๆ เห็นเงาคนก้ม ๆ เงย ๆ ใกล้ตู้โชว์มือถือ ภารกิจของเราคือหยุดการลักทรัพย์ไม่ให้คนร้ายออกจากห้างพร้อมสินค้า — ของที่โจรตั้งใจจะเอาต้องไม่ถูกพาออกจากห้างไปได้โดยสมบูรณ์ และพื้นที่ต้องกลับมาปลอดภัยจนเจ้าหน้าที่เข้ามาคุมได้จริง ไม่ใช่แค่เราโทรแจ้งแล้วเดินหนีไปเอง",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_seal_shattered_entity_entered": "no",
-        "goal_binding_ritual_completed_per_tome": "no",
-        "temple_basement_crystal_pedestal": "glowing_dim",
-        "temple_floor_sigils": "incomplete_glowing_lines",
-        "temple_iron_door_to_upper": "locked_key_in_lock",
-        "temple_grimoire": "open_on_lectern",
-        "temple_beyond_door_sounds": "scraping_claws"
+        "rule_burglar_exited_with_goods": "no",
+        "goal_burglary_thwarted_and_mall_secure": "no",
+        "mall_after_hours": true,
+        "mall_ambient_sound": "hvac_hum",
+        "mall_corridor_lights": "dim",
+        "electronics_store_backdoor": "ajar",
+        "electronics_store_lock": "damaged",
+        "electronics_store_showcase": "intact",
+        "burglar_presence": "inside_store",
+        "burglar_perceived_demeanor": "hurried",
+        "service_exit_distance_meters": 30
       }
     },
     {
-      "themes": ["ดิ้นรน", "กู้ภัย", "เมือง"],
-      "situation": "ไฟป่าใกล้หมู่บ้านลามเร็ว เราอยู่ศูนย์พักพิงชั่วคราว ท้องฟ้าเหลืองคลุ้งควัน อาสาสมัครวิ่งส่งถังน้ำ วิทยุสื่อสารฉุกเฉินวางบนโต๊ะยังไม่มีเสียงตอบจากหน่วยบิน แผนที่บนกระดานแสดงเส้นไฟขยับใกล้เส้นป้องกันสุดท้าย ประตูศูนย์ยังปิด เราต้องไม่ให้ไฟทะลุเส้นป้องกันจนถึงตัวอาคารศูนย์ และต้องให้มีการยืนยันจากฮ.กู้ภัยว่ากำลังมุ่งหน้ามาที่นี่จริง",
+      "themes": ["เหนือธรรมชาติ", "ระทึก", "สยองขวัญ"],
+      "situation": "เราเป็นอาสาสมัครดูแลศาลเจ้าเก่าในชุมชน คืนนี้ลมไม่พัดแต่กระดิ่งหน้าศาลดังเองเบา ๆ ไฟนีออนหน้าศาลกระพริบแล้วดับ เหลือแสงตะเกียงบนโต๊ะบูชา เงาตามผนังเหมือนขยับสวนกับทิศทางไฟ และมีเสียงขูดเล็บจากหลังม่านห้องเก็บของ ประตูไม้สั่นเป็นระยะเหมือนมีแรงดันจากข้างใน ภารกิจของเราคือทำให้การรบกวนยุติและศาลกลับสู่ความสงบ — สิ่งที่คุกคามต้องไม่เข้ามาในพื้นที่หลักที่เราเฝ้า และเครื่องบูชากับประตูต้องอยู่ในสภาพปลอดภัยจนเงียบสนิทจริง ไม่ใช่แค่เราวิ่งออกไปแล้วทิ้งปัญหาไว้",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_fire_line_breached_shelter_building": "no",
-        "goal_air_rescue_inbound_confirmed_by_radio": "no",
-        "shelter_doors": "closed",
-        "shelter_radio_handset": "no_ack_yet",
-        "shelter_map_fire_front": "near_final_line",
-        "shelter_sky_visible": "smoke_orange_haze",
-        "shelter_volunteer_activity": "busy_water_buckets"
+        "rule_entity_breached_inner_sanctum": "no",
+        "goal_shrine_calm_restored_and_entity_repelled": "no",
+        "shrine_front_light": "flicker_then_off",
+        "shrine_oil_lamp": "lit",
+        "shrine_bell_sound": "ringing_without_wind",
+        "shrine_back_room_curtain": "closed",
+        "shrine_storage_door": "vibrating",
+        "shrine_floor_dampness": "present",
+        "entity_presence": "behind_storage_door",
+        "entity_audible_sign": "scratching",
+        "neighborhood_outside_sound": "unnaturally_quiet"
       }
     },
     {
-      "themes": ["ตลก", "ละคร", "เมือง"],
-      "situation": "เราเป็นเพื่อนเจ้าสาวที่ถือกล่องแหวน งานแต่งกลางสวนกำลังจะเริ่ม แขกนั่งรอ นักดนตรีจูนเครื่อง แล้วลมแรงพัดหมวกคนหนึ่งไปโดนโต๊ะเค้ก กล่องแหวนในมือเรายังปิดสนิท แต่ฝาหลวม แหวนยังอยู่ข้างในเมื่อกี้ แต่ตอนนี้เห็นแค่ฟองน้ำ มีแมวส้มเดินผ่านไปทางพุ่มไม้หลังเวที เราต้องไม่ให้งานแตกเป็นเพราะแหวนหายไปจริง ๆ และต้องส่งแหวนคืนมือเจ้าสาวก่อนพิธีสาบาน",
+      "themes": ["ภัยพิบัติ", "เมือง", "เอาชีวิตรอด"],
+      "situation": "เราเป็นพนักงานร้านสะดวกซื้อริมถนน ฝนตกหนักจนหลังคาดังกลบเสียง น้ำไหลเข้าร้านจากใต้ประตูหน้าเป็นสายสีน้ำตาลขุ่น ปลั๊กไฟแถวตู้แช่มีประกายไฟแปลบ ๆ ลูกค้าสองคนติดอยู่ในร้าน มองออกไปเห็นน้ำท่วมสูง รถดับกลางน้ำ และไฟหน้าร้านกระพริบเหมือนจะดับทั้งเส้น ภารกิจของเราคือพาคนในร้านไปอยู่จุดสูงและตัดความเสี่ยงไฟฟ้าช็อต — ทุกคนต้องพ้นพื้นที่ที่น้ำท่วมสูงและมีประกายไฟ และไฟต้องถูกตัดจนยืนยันได้ว่าปลอดภัยจริง ไม่ใช่แค่เราวิ่งออกไปแล้วทิ้งปลั๊กไว้",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_wedding_rings_lost_irrecoverable": "no",
-        "goal_rings_in_brides_hand_before_vows": "no",
-        "wedding_ring_box": "open_empty_foam_only",
-        "wedding_stage_area": "musicians_tuning",
-        "wedding_guests_seated": "yes_waiting",
-        "wedding_orange_cat": "seen_near_hedge",
-        "wedding_wind": "strong_gusts"
+        "rule_flooded_store_electrical_accident": "no",
+        "goal_store_evacuated_and_electricity_isolated": "no",
+        "store_front_door_gap_water": "flowing_in",
+        "store_floor_water_depth_cm": 6,
+        "store_freezer_outlet_sparking": "intermittent",
+        "store_emergency_breaker_access": "behind_counter",
+        "store_customer_presence": "two",
+        "street_flood_level": "high",
+        "street_power_line_status": "flickering",
+        "weather_rain_intensity": "heavy"
       }
     },
     {
-      "themes": ["กู้ภัย", "ดิ้นรน", "ระทึก"],
-      "situation": "เราอยู่ทางเข้าอุโมงค์เหมืองที่ถล่ม ฝุ่นยังลอยในไฟฉาย ได้ยินเสียงตะโกนจากด้านในแผ่ว ๆ แต่ไม่ชัดคำ แท่นค้ำชั่วคราวยังไม่ติดตั้งครบ รถบรรทุกทรายจอดขวางทางแคบ หัวหน้าทีมยังไม่สัญญาณว่าปลอดภัยที่จะเข้าไปลึกกว่านี้ เราต้องไม่ให้ซากถล่มซ้ำจนผู้ติดข้างในไม่มีทางออก และต้องให้โครงค้ำชั่วคราวติดตั้งเสร็จและได้รับการยืนยันว่ารับน้ำหนักได้",
+      "themes": ["ไซไฟ", "เทคโนโลยี", "ระทึก"],
+      "situation": "เราเป็นช่างซ่อมในสถานีอวกาศวงโคจร เดินเข้าช่องทางบริการแล้วได้ยินเสียงลมหวีดแหลมเหมือนรอยรั่ว ไฟเตือนสีส้มกระพริบ มีละอองน้ำแข็งลอยจากรอยต่อท่อ และประตูบานกันอากาศถัดไปติดค้างครึ่งบาน ถ้าปล่อยไว้ โมดูลนี้จะเสียความดันจนทำงานต่อไม่ได้ ภารกิจของเราคืออุดรอยรั่วและทำให้ความดันกลับสู่ระดับปลอดภัยก่อนจะสาย — แรงดันอากาศต้องไม่ตกจนหายใจไม่ไหว และการซ่อมต้องยืนยันได้ว่าหายใจและทำงานได้ปกติจริง ไม่ใช่แค่เราปิดประตูแล้วเดินหนีไปโมดูลถัดไป",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_tunnel_secondary_collapse_buries_survivors": "no",
-        "goal_temporary_shoring_verified_safe_by_lead": "no",
-        "mine_tunnel_entrance": "partially_blocked_rubble",
-        "mine_voices_from_depth": "faint_shouts",
-        "mine_shoring_frames": "not_all_placed",
-        "mine_sand_truck": "blocking_narrow_path",
-        "mine_dust_air": "thick_in_beam"
+        "rule_station_pressure_became_critical": "no",
+        "goal_station_leak_sealed_and_pressure_normalized": "no",
+        "station_module": "service_corridor",
+        "station_alarm_light": "orange_blink",
+        "station_audible": "high_pitch_whistle",
+        "station_airlock_door": "stuck_half_closed",
+        "station_pressure_trend": "falling",
+        "station_frost_particles": "visible",
+        "leak_location": "pipe_joint_near_panel",
+        "toolkit_nearby": "mounted_on_wall"
       }
     },
     {
-      "themes": ["อาชญากรรม", "เมือง", "ละคร"],
-      "situation": "เราเป็นเจ้าหน้าที่ที่ถูกเรียกเข้าไปในห้องประชุมชั้นสูง ตัวประกันสามคนนั่งเก้าอี้หลังแถวเดียวกัน คนร้ายยืนข้างหน้าต่างกระจกบานใหญ่ มือถืออุปกรณ์คล้ายตัวจุดระเบิด โทรศัพท์บนโต๊ะประชุมยังไม่มีสายจากหน่วยเจรจา ลิฟต์โดยสารแสดงว่าหยุดที่ชั้นล่าง ทางบันไดหนีไฟปิดจากภายนอก เราต้องไม่ให้มีผู้เสียชีวิตในตัวประกัน และต้องเปิดช่องเจรจากับหน่วยเจรจาอย่างเป็นทางการให้สำเร็จ",
+      "themes": ["การเมือง", "เมือง", "สืบสวน"],
+      "situation": "เราเป็นผู้ช่วยเจ้าหน้าที่ในศูนย์เลือกตั้งชุมชน ห้องประชุมเล็ก ๆ มีกลิ่นกระดาษ บนโต๊ะมีหีบบัตรติดซีลใส เราเห็นชายแปลกหน้าพยายามเข้าใกล้หีบบัตรและอ้างคำสั่งด่วนให้ย้ายหีบ แต่ชื่อเขาไม่อยู่ในรายชื่อเจ้าหน้าที่ และป้ายบัตรถูกห้อยกลับด้าน ภารกิจของเราคือป้องกันการยุ่งกับหีบบัตรจนกว่าขั้นตอนจะปลอดภัยและตรวจสอบได้ — หีบบัตรต้องไม่ถูกเปิดหรือถูกนำออกไปโดยไม่ผ่านขั้นตอน และเจ้าหน้าที่ที่ถูกต้องต้องเข้ามายืนยันก่อนจะสลับของ ไม่ใช่แค่เราปฏิเสธปากเปล่าแล้วปล่อยให้คนอื่นยกหีบไป",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_hostage_killed": "no",
-        "goal_negotiation_channel_live_with_unit": "no",
-        "office_hostile_demeanor": "threatening",
-        "office_hostile_visible_device": "deadman_style_grip",
-        "office_hostages_count": "three_visible",
-        "office_negotiation_phone": "silent_no_incoming",
-        "office_elevator_status": "stopped_ground_floor",
-        "office_stair_exit": "blocked_from_outside"
+        "rule_ballot_box_compromised": "no",
+        "goal_ballot_box_protected_and_process_restored": "no",
+        "polling_room_smell": "paper",
+        "ballot_box_seal_status": "intact",
+        "polling_room_door": "open",
+        "intruder_presence": "near_ballot_box",
+        "intruder_badge_visibility": "obscured",
+        "official_roster_sheet": "on_table",
+        "outside_noise": "murmur"
       }
     },
     {
-      "themes": ["ไซไฟ", "สยองขวัญ", "ระทึก"],
-      "situation": "เราอยู่ห้องปลอดเชื้อชั้นล่างของห้องแล็บ ไฟสีขาวจ้า แผงแสดงว่าห้องปลอดเชื้อด้านในกำลังรั่วความดันลบเล็กน้อย สัญญาณไซเรนภายในอาคารยังไม่ดัง ชุดป้องกันเต็มใบแขวนอยู่แต่ยังไม่สวม ประตูล็อกสองชั้นไปทางโถงยังปิด หน้าจอระบบแจ้งว่าการล็อกดาวน์โซนรอการยืนยันจากหัวหน้า เราต้องไม่ให้เชื้อรุดลามออกนอกโซนที่กำหนด และต้องให้การล็อกดาวน์ห้องแล็บเสร็จสมบูรณ์ตามขั้นตอน",
+      "themes": ["เอาชีวิตรอด", "ระทึก"],
+      "situation": "เราเดินป่าเส้นทางศึกษาธรรมชาติ ฟ้าครึ้ม เส้นทางโคลนลื่น เราเห็นรอยเท้าสัตว์ใหญ่สด ๆ และได้ยินกิ่งไม้หักจากพุ่มไม้ กลิ่นสาบแรงลอยมา เงาดำขนาดใหญ่ขยับใกล้ ๆ แล้วเสียงคำรามต่ำดังจนอกสั่น ภารกิจของเราคือถอยออกจากเขตอันตรายโดยไม่ถูกสัตว์ทำร้าย — เราต้องกลับถึงเส้นทางหลักที่มีคนอื่นและออกจากเขตที่สัตว์ติดตามได้โดยยังเดินได้ปกติจริง ไม่ใช่แค่เราโทรขอความช่วยเหลือแล้วยืนรอในที่เสี่ยง",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_biohazard_zone_breach_spread": "no",
-        "goal_lab_zone_lockdown_complete": "no",
-        "lab_inner_chamber_pressure": "slight_negative_leak_indicator",
-        "lab_suit_rack": "full_suits_available",
-        "lab_building_siren": "off",
-        "lab_double_doors_to_corridor": "closed_locked",
-        "lab_lockdown_console": "awaiting_supervisor_confirm"
+        "rule_mauling_injury": "no",
+        "goal_reached_safe_trail_segment": "no",
+        "trail_surface": "muddy",
+        "weather_sky": "overcast",
+        "animal_tracks_fresh": true,
+        "animal_scent": "strong",
+        "animal_presence": "nearby_in_bushes",
+        "visibility": "partial_by_foliage",
+        "nearest_ranger_post_distance_km": 2.4
       }
     },
     {
-      "themes": ["ผจญภัย", "แฟนตาซี", "ระทึก"],
-      "situation": "เราอยู่กลางสะพานหินโบราณเหนือเหวลึก หมอกปกคลุมจนมองไม่เห็นก้นหลุม หินบางก้อนแตกร้าวใต้เท้า ฝั่งที่เรามายังมีเชือกและเสาเหล็กยึดอยู่ อีกฝั่งมีเพื่อนร่วมทางสองคนยือรออยู่ห่างจากขอบ กล่องที่บรรจุวัตถุศักดิ์สิทธิ์วางอยู่ใกล้เรา ยังไม่ข้ามไปฝั่งนั้น เราต้องไม่ให้วัตถุตกลงเหวหรือหายไปก่อนถึงวัด และต้องให้ทุกคนที่ยังอยู่บนสะพานข้ามไปฝั่งปลอดภัยได้",
+      "themes": ["เทคโนโลยี", "ไซไฟ"],
+      "situation": "เราเป็นนักวิจัยในห้องทดลองต้นแบบหุ่นยนต์ช่วยงาน หุ่นตัวหนึ่งลุกจากแท่นเองทั้งที่ควรพัก ไฟสถานะเปลี่ยนเป็นสีแดง แขนกลกางออกและก้าวเข้าหาเรา ปุ่มหยุดฉุกเฉินอยู่บนผนังแต่มีลังอุปกรณ์กีดขวางทาง ภารกิจของเราคือหยุดหุ่นให้กลับสู่โหมดปลอดภัยโดยไม่มีใครได้รับอันตราย — หุ่นต้องหยุดและล็อกสถานะปลอดภัยจริง ไม่ใช่แค่เราวิ่งออกจากห้องแล้วปล่อยให้มันทำงานต่อ",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_relic_lost_into_chasm": "no",
-        "goal_all_on_bridge_reached_safe_side": "no",
-        "bridge_fog": "thick_no_floor_visible",
-        "bridge_stones_underfoot": "cracked_some_loose",
-        "bridge_relic_container": "on_near_side",
-        "bridge_companions_far_side": "two_waiting",
-        "bridge_anchor_rope": "tied_near_tower"
+        "rule_robot_contact_injury": "no",
+        "goal_robot_emergency_stop_engaged_successfully": "no",
+        "lab_ambient_sound": "motor_hum",
+        "lab_emergency_stop_button": "visible_partially_blocked",
+        "lab_exit_door": "unlocked",
+        "robot_unit_id": "prototype_A3",
+        "robot_status_light": "red",
+        "robot_movement": "active",
+        "robot_distance_meters": 4,
+        "obstacle_crates": "between_you_and_button"
       }
     },
     {
-      "themes": ["ลึกลับ", "สยองขวัญ", "เรือดำน้ำ"],
-      "situation": "เราตื่นขึ้นมาในห้องเครื่องยนต์ใต้ทะเลลึก นาฬิกาบนผนังหยุดเดิน ไฟฟ้าส่องเป็นจังหวะ ท่อไอน้ำร้อนแต่ไม่มีคนคุม ประตูห้องเครื่องล็อกจากด้านนอก เสียงเคาะจังหวะสม่ำเสมอดังจากท่อระบาย แผงควบคุมแสดงว่าเรือยังไม่ขึ้นผิวและไม่มีสัญญาณ GPS เราต้องไม่ให้ความดันน้ำทำลายลำจนห้องน้ำเข้าเต็มก่อนถึงผิว และต้องเปิดการเชื่อมต่อกับสะพานบังคับหรือสัญญาณพื้นฐานให้ได้รับการตอบรับ",
+      "themes": ["อาชญากรรม", "สืบสวน"],
+      "situation": "เราเป็นเสมียนธนาคารสาขาเล็กช่วงบ่าย คนในโถงมีไม่กี่คน จู่ ๆ ชายสวมหมวกแก๊ปเดินเข้ามาพร้อมซองเอกสารหนา ๆ เขาวางซองบนเคาน์เตอร์แล้วกระซิบให้เราใส่เงินสดตามจำนวน ไม่งั้น “จะกด” เราเห็นมืออีกข้างของเขากดรีโมตเล็ก ๆ ที่ไฟแดงติดค้าง ถังดับเพลิงอยู่ข้างเสา และปุ่มแจ้งเหตุใต้โต๊ะยังอยู่ในระยะเอื้อม ภารกิจของเราคือยุติการข่มขู่โดยไม่ให้เงินสดถูกส่งมอบและไม่ให้ใครเจ็บ — เงินต้องอยู่ในการควบคุมและคนร้ายต้องไม่พาเงินออกไปได้โดยสมบูรณ์ ไม่ว่าจะด้วยการถูกควบคุมหรือถอยไปมือเปล่าจนภัยสิ้น ไม่ใช่แค่เรากดแจ้งเหตุหรือโทรออกไปแล้วจบ",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_pressure_hull_failure_flooding_fatal": "no",
-        "goal_bridge_comms_link_established": "no",
-        "engine_room_door": "locked_from_outside",
-        "engine_room_clock": "stopped",
-        "engine_room_steam_vents": "hissing_rhythm",
-        "engine_room_depth_readout": "deep_no_surface",
-        "engine_room_lighting": "flickering"
+        "rule_extortionist_left_with_cash": "no",
+        "goal_bank_threat_resolved_without_cash_loss": "no",
+        "bank_lobby_crowd": "few",
+        "bank_silent_alarm_button": "under_counter",
+        "bank_glass_partition": "intact",
+        "extortionist_presence": "at_counter",
+        "extortionist_visible_object": "remote_with_red_light",
+        "extortionist_perceived_demeanor": "cold_whisper",
+        "bank_fire_extinguisher": "near_pillar"
       }
     },
     {
-      "themes": ["ไซไฟ", "เมือง", "อาชญากรรม"],
-      "situation": "เราขับแท็กซี่ไร้คนขับในเมืองยามค่ำ ระบบนำทางเด้งเส้นทางใหม่ทุกสิบวินาที กระจกมองหลังเห็นถุงในรถหลังมีไฟกระพริบเล็ก ๆ คล้ายอุปกรณ์ติดตาม ด้านนอกมีโดรนตำรวจบินผ่านแต่ยังไม่จอดส่องคันเรา ประตูล็อกอัตโนมัติยังทำงาน เราต้องไม่ให้แพ็กเกจในรถถูกส่งถึงมือผู้รับที่ระบุในแอปก่อนมีการตรวจสอบจากเจ้าหน้าที่ และต้องให้มีการยืนยันจากตำรวจว่ารับเรื่องและกำลังสกัดจุดส่ง",
+      "themes": ["เมือง", "ระทึก"],
+      "situation": "เราเป็นผู้โดยสารรถไฟใต้ดินขบวนสุดท้าย ไฟในตู้สว่างแต่สั่น ๆ เหมือนแรงดันตก เสียงล้อเสียดรางแหลมขึ้นผิดปกติ แล้วรถก็หยุดกระตุกกลางอุโมงค์ ไฟดับไปครึ่งตู้ เหลือแสงฉุกเฉินสีเขียว ประตูไม่เปิดและมีเสียงประกาศขาด ๆ หาย ๆ ว่ามีควันในตู้ถัดไป เราได้กลิ่นไหม้จาง ๆ ภารกิจของเราคือพาตัวเองไปยังตู้หรือจุดปลอดควันและช่วยให้การอพยพเกิดขึ้นโดยไม่ถูกควันครอบงำ — เราต้องอยู่ในอากาศที่หายใจได้และไม่ถูกเหยียบย่ำจนขยับไม่ได้จริง ไม่ใช่แค่เราโทรแจ้งแล้วยืนรอในตู้ที่ควันหนาขึ้น",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_package_delivered_to_recipient_before_clearance": "no",
-        "goal_police_intercept_confirmed_for_drop": "no",
-        "taxi_nav_status": "rerouting_repeatedly",
-        "taxi_rear_bag_blink": "visible_slow_blink",
-        "taxi_doors": "locked_auto",
-        "taxi_police_drone": "passed_overhead_not_hailing"
+        "rule_subway_smoke_or_stampede_incapacitation": "no",
+        "goal_subway_evacuated_to_safe_area": "no",
+        "subway_train_status": "stopped_in_tunnel",
+        "subway_lighting": "half_off_emergency_green",
+        "subway_door_status": "locked",
+        "subway_air_smell": "burnt_hint",
+        "subway_announcement_audio": "choppy",
+        "subway_crowd_mood": "anxious"
       }
     },
     {
-      "themes": ["แฟนตาซี", "ตลก", "ผจญภัย"],
-      "situation": "เราเป็นนักเล่นแร่แปรธาตุที่สอบไม่ผ่านรอบสุดท้าย ในห้องสอบมีโถใส่ของเหลวสีเขียวเดือด อาจารย์ยืนข้างโต๊ะยิ้มแห้ง ๆ สูตรบนกระดานดูผิดตัวเลขหนึ่งจุด นักเรียนคนอื่นก้มหน้าคนละอาการ เราต้องไม่ให้ห้องระเบิดหรือของเหลวกระเซ็นใส่คนอื่นจนเจ็บหนัก และต้องทำให้การทดลองครั้งนี้ผ่านเกณฑ์ขั้นต่ำตามที่อาจารย์ประกาศไว้",
+      "themes": ["ภัยพิบัติ", "เอาชีวิตรอด"],
+      "situation": "เราอยู่บนเรือโดยสารข้ามฟากตอนกลางคืน ลมแรงทำให้เรือโยก น้ำกระเด็นเข้ามาทางหน้าต่างที่ปิดไม่สนิท จู่ ๆ ได้ยินเสียงโลหะดังปึงจากใต้ท้องเรือ แล้วเครื่องยนต์สะดุด ไฟบนเพดานดับไปเหลือไฟฉุกเฉินสีส้ม กัปตันตะโกนให้ทุกคนสวมชูชีพ แต่ตู้ชูชีพบางตู้ติดขัด ภารกิจของเราคือทำให้เรากับคนรอบตัวมีชูชีพและไปถึงจุดรวมพลที่ปลอดภัยก่อนสถานการณ์ทรุด — เราต้องไม่ตกน้ำโดยไม่มีชูชีพหรือถูกกระแทกจนหมดสติ และต้องได้รับการช่วยเหลือหรืออยู่ในตำแหน่งที่ยืนยันได้ว่าปลอดภัยจริง ไม่ใช่แค่เราโทรออกไปแล้วยืนรอบนดาดฟ้า",
       "worldState": {
         "system_protagonist_alive": "yes",
-        "rule_exam_catastrophe_class_injured": "no",
-        "goal_exam_minimum_pass_mark_achieved": "no",
-        "exam_cauldron": "boiling_green",
-        "exam_formula_on_board": "one_digit_suspect",
-        "exam_instructor_demeanor": "dry_smile",
-        "exam_other_students": "heads_down_varied"
+        "rule_ferry_overboard_without_lifejacket": "no",
+        "goal_lifejacket_secured_and_rescue_stable": "no",
+        "ferry_weather": "windy",
+        "ferry_lighting": "emergency_orange",
+        "ferry_engine": "stuttering",
+        "ferry_lifejacket_locker": "some_stuck",
+        "ferry_deck_surface": "wet_slippery",
+        "passenger_crowd": "panicking"
+      }
+    }
+    ,
+    {
+      "themes": ["อาชญากรรม", "เมือง", "สืบสวน"],
+      "situation": "เราเป็นพนักงานส่งของเข้าโกดังย่านท่าเรือ ตอนค่ำแสงไฟโซเดียมสีส้มทำให้เงายาวผิดรูป ประตูม้วนโกดังเปิดค้างครึ่งบานและมีกลิ่นน้ำมันเครื่องฉุน ภายในได้ยินเสียงลังไม้ถูกลากกับพื้นซีเมนต์ แล้วไฟฉายของใครบางคนกวาดผ่านช่องว่าง เราเห็นป้าย “ห้ามเข้า” และกล้องวงจรปิดที่มุมหนึ่งถูกหันเฉียงเหมือนโดนกระแทก ภารกิจของเราคือหยุดการขนของผิดกฎหมายไม่ให้รถบรรทุกออกจากโกดังพร้อมของ — ของผิดกฎหมายต้องไม่ถูกพาออกไปโดยครบ และพื้นที่ต้องถูกควบคุมจนเจ้าหน้าที่เข้ามาคุมได้จริง ไม่ใช่แค่เราแจ้งเหตุแล้วเดินหนีไปเอง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_contraband_truck_departed": "no",
+        "goal_contraband_secured_and_warehouse_controlled": "no",
+        "dock_warehouse_door": "half_open",
+        "dock_warehouse_light": "sodium_orange",
+        "dock_warehouse_floor_sound": "crate_dragging",
+        "dock_cctv_angle": "misaligned",
+        "truck_presence": "loading_bay",
+        "smugglers_presence": "inside_warehouse",
+        "smugglers_visible_light": "flashlight_sweep"
+      }
+    },
+    {
+      "themes": ["สืบสวน", "เหนือธรรมชาติ"],
+      "situation": "เราเป็นนักข่าวที่ตามเรื่องบ้านเช่าร้างในซอยเงียบ ตอนเย็นฝุ่นลอยในลำแสงผ่านช่องหน้าต่างแตก ประตูไม้ครางเมื่อเราแง้มเข้าไป กลิ่นอับชื้นกับกลิ่นเหมือนโลหะสนิมตีจมูก บนพื้นมีรอยเท้าเปียกทั้งที่ไม่มีฝน และจากชั้นบนมีเสียงของหนัก ๆ ลากช้า ๆ เราเห็นบันไดขึ้นชั้นสองแต่ขั้นกลางหักไปหนึ่งขั้น โทรศัพท์มีสัญญาณอ่อน ๆ ภารกิจของเราคือเก็บหลักฐานให้ชัดและออกจากบ้านอย่างปลอดภัย — เราต้องไม่หลงทางหรือถูกขังจนออกไม่ได้ หลักฐานต้องอยู่ในความครอบครองและเราอยู่นอกบ้านโดยปลอดภัยจริง ไม่ใช่แค่เราแคปภาพแล้วส่งแล้วจบ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_trapped_in_haunted_house": "no",
+        "goal_exit_with_evidence_and_safe": "no",
+        "house_front_door": "creaking",
+        "house_air_smell": "damp_rust",
+        "house_window": "broken",
+        "house_floor_footprints": "wet_trail",
+        "house_upstairs_sound": "dragging",
+        "stair_step_damage": "one_missing",
+        "phone_signal": "weak"
+      }
+    },
+    {
+      "themes": ["การเมือง", "ระทึก", "เมือง"],
+      "situation": "เราเป็นผู้ร่วมงานในเวทีเสวนากลางแจ้ง คนแน่นและเสียงลำโพงก้องจนหัวสั่น ขณะพิธีกรกำลังขึ้นพูด เราเห็นคนสวมเสื้อคลุมหนาทั้งที่อากาศร้อน เบียดผ่านแนวเก้าอี้และถือกระเป๋าเป้หนักผิดปกติ เขามองเวทีไม่กะพริบ มือจับสายสะพายแน่น เราเห็นเจ้าหน้าที่การ์ดยืนห่างออกไปอีกฝั่ง และทางหนีไฟด้านหลังเวทีถูกลังน้ำดื่มกีดไว้บางส่วน ภารกิจของเราคือทำให้เหตุคุกคามหยุดก่อนเกิดการระเบิดหรือความชุลมุนใหญ่ — จุดเสี่ยงต้องถูกปลดและฝูงชนต้องไม่แตกกระจายจนมีผู้บาดเจ็บสาหัสจำนวนมากจริง ไม่ใช่แค่เราวิ่งหนีไปแล้วจบ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_mass_casualty_incident": "no",
+        "goal_threat_intercepted_and_crowd_stabilized": "no",
+        "rally_crowd_density": "high",
+        "rally_speaker_volume": "loud",
+        "suspicious_person_presence": "near_seating",
+        "suspicious_person_bag": "heavy_backpack",
+        "security_guard_positions": "sparse",
+        "stage_back_exit": "partially_blocked_by_crates"
+      }
+    },
+    {
+      "themes": ["ภัยพิบัติ", "เมือง"],
+      "situation": "เราเป็นช่างของการไฟฟ้าอยู่หน้าตู้คอนโทรลริมถนนตอนบ่าย ท้องฟ้ามืดผิดปกติและลมพัดเศษใบไม้หมุนวน เสาไฟข้างทางสั่นและมีเสียงปะทุแปลบ ๆ จากหัวคัตเอาต์ กลิ่นโอโซนฉุน ข้างหน้ามีสายไฟตกพาดพื้นเปียกเป็นประกายเล็ก ๆ คนเริ่มมามุงดูและเด็กวิ่งเล่นใกล้เกินไป ภารกิจของเราคือกันพื้นที่และทำให้สายไฟอันตรายหยุดจ่ายไฟก่อนมีคนถูกช็อต — ต้องไม่มีใครสัมผัสสายไฟมีไฟจนเกิดอันตรายร้ายแรง และพื้นที่ต้องกลับมาปลอดภัยจนยืนยันได้ว่าสายไม่มีกระแสแล้ว ไม่ใช่แค่เราตะโกนเตือนแล้วเดินจากไป",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_live_wire_contact_injury": "no",
+        "goal_power_isolated_and_area_secured": "no",
+        "street_weather": "storm_wind",
+        "utility_box_status": "sparking",
+        "downed_power_line": "across_wet_ground",
+        "ozone_smell": "strong",
+        "bystanders_presence": "gathering",
+        "child_nearby": true
+      }
+    },
+    {
+      "themes": ["ไซไฟ", "สืบสวน"],
+      "situation": "เราเป็นช่างซ่อมโดรนของบริษัทขนส่ง เข้าไปในลานซ่อมแล้วเห็นโดรนขนของลอยนิ่งกลางอากาศทั้งที่ไม่มีคำสั่ง ใบพัดหมุนช้า ๆ ส่งเสียงหึ่งต่ำ และไฟสถานะกระพริบเป็นรหัสที่เราไม่รู้จัก กล่องพัสดุใต้ท้องโดรนถูกล็อกด้วยซีลสีแดงที่มีคำว่า “หลักฐาน” พื้นล่างมีรอยไหม้เป็นวง ๆ เหมือนเคยมีการชาร์จไฟผิดปกติ ภารกิจของเราคือทำให้โดรนหยุดและรักษาพัสดุหลักฐานไม่ให้เสียหายหรือถูกขโมย — กล่องหลักฐานต้องอยู่ครบและโดรนต้องลงจอดในสภาพปลอดภัยจริง ไม่ใช่แค่เรารีบถอดแบตแล้วเดินจากไป",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_evidence_package_compromised": "no",
+        "goal_drone_safed_and_evidence_intact": "no",
+        "drone_bay_lighting": "bright",
+        "drone_hover_status": "stuck_hovering",
+        "drone_status_light": "unknown_pattern",
+        "drone_payload_seal": "red_evidence_tag",
+        "ground_scorch_mark": "circular",
+        "control_console_access": "nearby",
+        "security_camera": "on"
+      }
+    },
+    {
+      "themes": ["อาชญากรรม", "ระทึก"],
+      "situation": "เราเป็นบาริสต้าในคาเฟ่ชานเมือง ช่วงเช้าลูกค้ามีสองโต๊ะ เสียงเครื่องบดกาแฟดังกลบถนน จู่ ๆ ชายคนหนึ่งเข้ามาพร้อมผ้าปิดหน้าและยกปืนสั้นขึ้นต่ำ ๆ เขาชี้ไปที่ลิ้นชักเงินและสั่งให้เราเปิด ข้างหลังเราเป็นประตูไปห้องครัวที่มีมีดวางบนแม่เหล็กติดผนัง และมีปุ่มสัญญาณเงียบใต้เคาน์เตอร์ แต่เขายืนใกล้พอจะเห็นมือเรา ภารกิจของเราคือยุติการปล้นโดยไม่มีใครถูกยิงและไม่ให้คนร้ายออกไปพร้อมเงิน — เงินสดต้องไม่ถูกพาออกจากร้านไปได้โดยสมบูรณ์ และภัยต้องสิ้นจริง ไม่ใช่แค่เรากดแจ้งเหตุหรือโทรออกไปแล้วจบ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_robber_left_cafe_with_cash": "no",
+        "goal_cafe_robbery_ended_without_cash_loss": "no",
+        "cafe_customer_count": 4,
+        "cafe_music": "low",
+        "cafe_silent_alarm_button": "under_counter",
+        "cafe_kitchen_door": "behind_bar",
+        "robber_presence": "at_counter",
+        "robber_visible_threat": "handgun_low_ready"
+      }
+    },
+    {
+      "themes": ["เหนือธรรมชาติ", "เมือง", "สยองขวัญ"],
+      "situation": "เราเป็นยามของอาคารพิพิธภัณฑ์กลางคืน ห้องจัดแสดงมืดมีแค่ไฟทางเดินและเสียงระบบปรับอากาศ จู่ ๆ ตู้กระจกที่เก็บหน้ากากโบราณมีฝ้าขึ้นจากด้านในเหมือนมีลมหายใจ กระจกส่งเสียงติ๊งเบา ๆ ทั้งที่ไม่มีใครแตะ เราเห็นเงาสะท้อนตัวเองในกระจกแล้วเหมือนมีเงาอีกคนยืนซ้อนด้านหลัง แต่เมื่อหันกลับไปไม่มีอะไร ภารกิจของเราคือทำให้ความผิดปกติหยุดและปกป้องวัตถุจัดแสดงไม่ให้เสียหาย — หน้ากากต้องอยู่ในตู้และไม่แตกหรือหายไปโดยไม่ผ่านขั้นตอน และห้องต้องกลับมาปลอดภัยจนเงียบสนิทจริง ไม่ใช่แค่เราวิ่งออกไปแล้วปิดไฟ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_artifact_removed_or_damaged": "no",
+        "goal_museum_anomaly_contained_and_artifact_safe": "no",
+        "museum_gallery_lights": "dim",
+        "museum_hvac_sound": "steady",
+        "artifact_case_glass": "fogging_inside",
+        "artifact_name": "ancient_mask",
+        "guard_radio_signal": "normal",
+        "anomaly_reflection": "second_shadow"
+      }
+    },
+    {
+      "themes": ["เทคโนโลยี", "สืบสวน", "เมือง"],
+      "situation": "เราเป็นผู้ดูแลระบบของศูนย์ข้อมูลเมือง เข้าห้องควบคุมแล้วเห็นจอแผนที่กล้องจราจรขึ้นภาพซ้ำ ๆ เหมือนถูกป้อนสัญญาณปลอม ไฟเตือนสีแดงขึ้นว่า “stream mismatch” และบันทึกเหตุการณ์ถูกลบเป็นช่วง ๆ ข้าง ๆ เครื่องมีแฟลชไดรฟ์สีดำที่เราไม่รู้ว่าใครเสียบทิ้งไว้ พัดลมเคสส่งเสียงดังขึ้นเหมือนกำลังรันอะไรหนัก ๆ ภารกิจของเราคือหยุดการแทรกแซงและทำให้ระบบกลับมาดูภาพจริงที่ตรวจสอบได้ — บันทึกและภาพต้องกลับมาสอดคล้องกับความจริงจนกู้คืนได้จริง ไม่ใช่แค่เราปลั๊กคอมแล้วหนีออกจากห้อง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_cctv_system_compromised_persistently": "no",
+        "goal_intrusion_removed_and_logs_restored": "no",
+        "control_room_monitors": "looping_feeds",
+        "control_room_alert": "stream_mismatch",
+        "control_room_usb_drive": "unknown_inserted",
+        "server_cpu_load": "high",
+        "network_link_status": "connected",
+        "log_retention_gap_minutes": 18
+      }
+    },
+    {
+      "themes": ["เอาชีวิตรอด", "ภัยพิบัติ"],
+      "situation": "เราอยู่ในลิฟต์ตึกสูงช่วงเที่ยง ลิฟต์กระตุกแรงจนเข่าชนราว เสียงโลหะเสียดดังครืด แล้วลิฟต์หยุดนิ่ง ไฟดับไปเหลือไฟฉุกเฉินและพัดลมระบายอากาศหมุนช้าลง เรากดปุ่มโทรศัพท์ฉุกเฉินแล้วได้เสียงสัญญาณขาด ๆ เหมือนสายไม่ชัด อากาศเริ่มอับและมีเสียงคนอีกคนหายใจเร็วอยู่มุมหนึ่ง ภารกิจของเราคือรักษาสติและเอาตัวเองออกจากลิฟต์อย่างปลอดภัยก่อนขาดอากาศหรือเกิดอันตรายซ้ำ — เราต้องไม่หมดสติจากอากาศอับหรือตื่นตระหนกจนควบคุมตัวเองไม่ได้ และต้องออกจากตู้ลิฟต์ไปถึงพื้นที่ปลอดภัยจริง ไม่ใช่แค่เรากดโทรแล้วจบ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_elevator_asphyxia_or_panic_incapacitation": "no",
+        "goal_elevator_rescue_completed_safely": "no",
+        "elevator_status": "stuck_between_floors",
+        "elevator_lighting": "emergency_dim",
+        "elevator_vent_fan": "slow",
+        "elevator_alarm_button": "working",
+        "elevator_intercom": "static",
+        "other_passenger_presence": "one_anxious"
+      }
+    },
+    {
+      "themes": ["เมือง", "สืบสวน"],
+      "situation": "เราเป็นพนักงานรับพัสดุของคอนโดช่วงเย็น ล็อบบี้ยังมีคนเดินเข้าออกและเสียงประตูกระจกเปิดปิดถี่ กล่องพัสดุชิ้นหนึ่งถูกวางไว้หน้าห้องจดหมายโดยไม่มีชื่อผู้รับ มีเทปพันหลายชั้นและได้ยินเสียงติ๊กเบา ๆ จากข้างใน รปภ.อีกคนกำลังพาผู้อยู่อาศัยไปทางบันไดหนีไฟ ภารกิจของเราคือคุมพื้นที่ให้ปลอดภัยและยืนยันสถานะพัสดุต้องสงสัยโดยไม่มีผู้บาดเจ็บ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_suspicious_parcel_caused_injury": "no",
+        "goal_lobby_cleared_and_parcel_secured": "no",
+        "condo_lobby_crowd": "moderate",
+        "parcel_label": "missing",
+        "parcel_sound": "soft_ticking",
+        "mailroom_door": "open",
+        "guard_presence": "one_assisting_evacuate"
+      }
+    },
+    {
+      "themes": ["อาชญากรรม", "เมือง"],
+      "situation": "เราเป็นพนักงานร้านมือถือในห้าง ช่วงหัวค่ำลูกค้าบางตา คนสวมหมวกบังหน้ามาขอดูเครื่องรุ่นแพงและพยายามเดินถอยไปทางประตูพร้อมกล่องโชว์ในมือ เสียงเซ็นเซอร์กันขโมยที่ประตูร้องเตือนครั้งสั้น ๆ แล้วเงียบ ภารกิจของเราคือหยุดการฉกสินค้าโดยไม่ให้ใครในร้านได้รับอันตราย",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_snatcher_exited_with_demo_phone": "no",
+        "goal_demo_phone_recovered_and_store_safe": "no",
+        "phone_shop_entry": "open",
+        "anti_theft_gate": "triggered_once",
+        "suspect_presence": "near_exit",
+        "suspect_item": "demo_phone_box",
+        "customer_count": 3
+      }
+    },
+    {
+      "themes": ["ภัยพิบัติ", "เมือง"],
+      "situation": "เราเป็นเจ้าหน้าที่เทศกิจอยู่ใต้สะพานลอยตอนฝนซา น้ำยังไหลแรงลงท่อระบายน้ำที่ฝาท่อหลุดออกไป เห็นน้ำวนแรงและคนเดินฝ่าฝนไม่ทันสังเกต เด็กนักเรียนสองคนยืนหลบฝนใกล้จุดอันตราย ภารกิจของเราคือกันคนออกจากจุดเสี่ยงและปิดพื้นที่จนหน่วยซ่อมเข้าควบคุม",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_pedestrian_fell_into_open_drain": "no",
+        "goal_hazard_zone_isolated_until_repair": "no",
+        "rain_status": "light",
+        "drain_cover_status": "missing",
+        "water_current": "strong",
+        "student_presence": "two_nearby",
+        "warning_cone_availability": "limited"
+      }
+    },
+    {
+      "themes": ["เทคโนโลยี", "สืบสวน"],
+      "situation": "เราเป็นแอดมินระบบในสำนักงานประกันภัย ตอนเช้าจอมอนิเตอร์ขึ้นหน้าต่างล็อกไฟล์พร้อมนับถอยหลังเป็นสีแดง เสียงแจ้งเตือนดังต่อเนื่อง โฟลเดอร์เอกสารลูกค้าหลายอันเปลี่ยนชื่อไฟล์เป็นชุดตัวอักษรสุ่ม ภารกิจของเราคือหยุดการเข้ารหัสไฟล์และกู้การทำงานหลักให้กลับมาปลอดภัยโดยไม่สูญข้อมูลสำคัญ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_ransomware_encryption_completed": "no",
+        "goal_encryption_stopped_and_core_data_restored": "no",
+        "office_network_status": "connected",
+        "endpoint_alert_level": "critical",
+        "file_server_activity": "abnormal_rename_spike",
+        "backup_console": "reachable",
+        "countdown_timer_visible": true
+      }
+    },
+    {
+      "themes": ["ไซไฟ", "ระทึก"],
+      "situation": "เราเป็นนักบินยานขนส่งแร่ในวงโคจรต่ำ สัญญาณเรดาร์ขึ้นจุดกระพริบหลายจุดเหมือนเศษซากพุ่งตัดเส้นทาง ไฟเตือนการชนดังเป็นจังหวะและระบบหมุนยานตอบสนองช้ากว่าปกติ เราเห็นหน้าต่างพอร์ตด้านขวาถูกสะเก็ดเล็ก ๆ กระแทกจนเกิดรอยร้าวเส้นผม ภารกิจของเราคือพายานพ้นกลุ่มเศษซากและรักษาความดันภายในให้ปลอดภัย",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_ship_hull_breach_catastrophic": "no",
+        "goal_debris_field_evaded_and_cabin_stable": "no",
+        "ship_autopilot": "lagging",
+        "radar_contacts": "multiple_fast",
+        "starboard_viewport_crack": "hairline",
+        "collision_alarm": "active",
+        "thruster_response": "delayed"
+      }
+    },
+    {
+      "themes": ["เหนือธรรมชาติ", "สืบสวน", "สยองขวัญ"],
+      "situation": "เราเป็นอาสากู้ภัยที่เข้าไปค้นอาคารโรงเรียนร้างตอนค่ำ ไฟฉายส่องเห็นฝุ่นลอยหนาและกระดานดำมีชอล์กเขียนเพิ่มเองเป็นเส้นสั้น ๆ ประตูห้องวิทย์เปิดปิดช้า ๆ ทั้งที่ไม่มีลม และวิทยุสื่อสารแตกเสียงแทรกเป็นคำไม่ชัด ภารกิจของเราคือค้นหาผู้สูญหายที่มีรายงานล่าสุดและออกจากอาคารพร้อมกันอย่างปลอดภัย",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_search_team_member_missing": "no",
+        "goal_reported_missing_person_extracted_safely": "no",
+        "school_power": "off",
+        "flashlight_battery": "medium",
+        "lab_room_door": "swinging",
+        "radio_signal": "interference",
+        "chalkboard_markings": "appearing"
+      }
+    },
+    {
+      "themes": ["การเมือง", "เมือง"],
+      "situation": "เราเป็นผู้ช่วยสื่อสารในงานแถลงข่าวศาลากลาง ไมค์หลักบนโพเดียมเกิดเสียงหวีดแรงจนคนในห้องแตกตื่น ผู้สื่อข่าวเริ่มลุกเดินเข้ามาใกล้เวทีและสายไฟไมค์พาดขวางทางเดิน ภารกิจของเราคือคุมสถานการณ์ให้การแถลงดำเนินต่ออย่างปลอดภัยโดยไม่มีใครสะดุดบาดเจ็บ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_press_room_injury_from_stage_chaos": "no",
+        "goal_press_briefing_stabilized_and_safe": "no",
+        "podium_mic_status": "feedback_loop",
+        "crowd_movement": "converging_to_stage",
+        "cable_layout": "across_walkway",
+        "security_staff_nearby": "two"
+      }
+    },
+    {
+      "themes": ["ตลก", "เมือง"],
+      "situation": "เราเป็นพิธีกรงานเลี้ยงบริษัทในห้องบอลรูม จู่ ๆ เครื่องคาราโอเกะค้างที่เพลงเดิมและเร่งเสียงจนลำโพงแตกพร่า ผู้บริหารกำลังถือไมค์ร้องค้างท่อนฮุก ส่วนพนักงานเริ่มหัวเราะเสียงดังและแห่ขึ้นเวทีจนพื้นสั่น ภารกิจของเราคือกู้สถานการณ์งานเลี้ยงให้กลับมาคุมได้และไม่มีใครเจ็บจากความชุลมุนบนเวที",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_stage_collapse_during_karaoke_chaos": "no",
+        "goal_event_flow_restored_without_injury": "no",
+        "ballroom_speaker_status": "distorted_loud",
+        "karaoke_system_state": "frozen_on_repeat",
+        "stage_crowd_density": "high",
+        "mc_wireless_mic_battery": "low",
+        "security_barrier": "folded_aside"
+      }
+    },
+    {
+      "themes": ["ตลก", "เมือง", "สืบสวน"],
+      "situation": "เราเป็นเพื่อนเจ้าบ่าวในงานแต่ง กลิ่นขนมหวานเต็มห้องและแขกกำลังรอถ่ายรูป แต่เค้กสามชั้นเริ่มเอียงช้า ๆ เพราะโต๊ะรองขาหนึ่งยุบ เสียงป้าฝ่ายเจ้าสาวร้องให้ช่วยดังลั่น ห้องครัวอยู่ห่างไปไม่กี่เมตรและมีถาดรองเหล็กวางพิงผนัง ภารกิจของเราคือรักษาเค้กและเวทีถ่ายรูปให้อยู่รอดจนพิธีผ่านไปโดยไม่มีใครโดนเค้กล้มทับ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_wedding_cake_toppled_on_guests": "no",
+        "goal_cake_stabilized_until_ceremony_complete": "no",
+        "cake_tilt_angle": 12,
+        "table_leg_condition": "one_sinking",
+        "guest_cluster_near_stage": "dense",
+        "kitchen_distance_meters": 5,
+        "metal_tray_available": true
+      }
+    },
+    {
+      "themes": ["ตลก", "เทคโนโลยี"],
+      "situation": "เราเป็นพนักงานออฟฟิศที่ต้องพิมพ์สัญญาด่วน เครื่องพิมพ์กลางออฟฟิศดันพ่นกระดาษต่อเนื่องไม่หยุดและพิมพ์แต่รูปแมวใส่เนคไท เสียงเครื่องดังครืดพร้อมไฟแจ้งเตือนกระพริบสีส้ม คนในทีมเริ่มถ่ายคลิปขำกันจนทางเดินหน้าเครื่องแน่น ภารกิจของเราคือหยุดเครื่องให้ปลอดภัยและกู้คิวพิมพ์เอกสารจริงทันเวลา",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_printer_overheat_or_paper_fire": "no",
+        "goal_printer_reset_and_contract_printed": "no",
+        "printer_queue_status": "stuck_cat_images",
+        "printer_warning_light": "orange_blink",
+        "paper_tray_level": "low",
+        "office_walkway_blockage": "crowded",
+        "it_helpdesk_response": "pending"
+      }
+    },
+    {
+      "themes": ["ตลก", "เอาชีวิตรอด"],
+      "situation": "เราเป็นพนักงานคาเฟ่แมวช่วงบ่าย ลูกค้ากำลังป้อนขนมอยู่ดี ๆ แมวหัวโจกตัวอ้วนดันเปิดประตูครัวได้แล้ววิ่งคาบปลากระป๋องออกมา แมวตัวอื่นไล่ตามเป็นขบวนทำให้ลูกค้าสะดุดเก้าอี้กันวุ่น ถาดน้ำอยู่บนชั้นเตี้ยเริ่มโยก ภารกิจของเราคือจับสถานการณ์ให้นิ่ง พาแมวกลับโซนปลอดภัย และไม่ให้ใครลื่นล้ม",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_customer_slip_in_cat_chase": "no",
+        "goal_all_cats_returned_and_floor_safe": "no",
+        "cat_leader_location": "near_customer_zone",
+        "cat_group_behavior": "chasing_food",
+        "water_tray_stability": "wobbling",
+        "kitchen_door_status": "ajar",
+        "customer_table_spacing": "tight"
+      }
+    },
+    {
+      "themes": ["ตลก", "เมือง"],
+      "situation": "เราเป็นมาสคอตประจำงานวิ่งการกุศลในสวนสาธารณะ ชุดมาสคอตหัวโตบดบังสายตาด้านข้าง ขณะโบกมือถ่ายรูป เด็กคนหนึ่งส่งลูกโป่งฮีเลียมให้แล้วเชือกดันพันเข้ากับซิปหลังชุด เสียงพิธีกรนับถอยหลังปล่อยตัวนักวิ่งดังขึ้น คนเริ่มกรูกันมาหน้าซุ้มถ่ายรูป ภารกิจของเราคือคลายปัญหาให้ทันและเปิดทางเดินให้ปลอดภัยก่อนขบวนนักวิ่งชนกัน",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_runner_pileup_at_photo_booth": "no",
+        "goal_photo_booth_cleared_before_start_signal": "no",
+        "mascot_visibility": "limited_side_view",
+        "balloon_string_status": "snagged_on_zipper",
+        "runner_flow_direction": "toward_booth",
+        "countdown_seconds": 30,
+        "staff_assistance_distance_meters": 12
+      }
+    },
+    {
+      "themes": ["เมือง", "เอาชีวิตรอด"],
+      "situation": "เราเป็นพ่อครัวรถฟู้ดทรักตอนตลาดกลางคืน ถังแก๊สสำรองส่งกลิ่นแรงผิดปกติและได้ยินเสียงลมรั่วฟู่เบา ๆ ใต้เคาน์เตอร์ เปลวไฟเตาเริ่มแกว่ง ลูกค้ายืนต่อคิวใกล้รถ ภารกิจของเราคือหยุดการรั่วและเคลียร์คนออกจากระยะเสี่ยงก่อนเกิดไฟลุก",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_gas_leak_ignition_burn_injury": "no",
+        "goal_leak_stopped_and_queue_relocated": "no",
+        "food_truck_burner_flame": "unstable",
+        "spare_gas_cylinder_sound": "hissing",
+        "queue_distance_meters": 2,
+        "fire_extinguisher_status": "mounted_ready",
+        "market_ambient_wind": "low"
+      }
+    },
+    {
+      "themes": ["สืบสวน", "เมือง"],
+      "situation": "เราเป็นผู้ช่วยนักสืบเอกชนในสำนักงานเล็ก ได้รับซองเอกสารไม่ลงชื่อที่มีภาพถ่ายเวลาและสถานที่นัดหมาย เมื่อเปิดซองมีผงขาวบางส่วนร่วงบนโต๊ะและมือถือส่งข้อความไม่ระบุตัวตนว่าให้เราไปคนเดียวที่ลานจอดรถชั้นใต้ดิน ภารกิจของเราคือจัดการหลักฐานและความปลอดภัยก่อนออกปฏิบัติการต่อ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_evidence_contaminated_or_lost": "no",
+        "goal_evidence_secured_and_safe_plan_prepared": "no",
+        "office_entry_door": "locked",
+        "anonymous_message_received": true,
+        "envelope_sender": "unknown",
+        "powder_on_desk": "visible",
+        "parking_meetup_time_minutes": 20
+      }
+    },
+    {
+      "themes": ["การเมือง", "สืบสวน"],
+      "situation": "เราเป็นผู้ช่วยทีมโต้วาทีโทรทัศน์สด ก่อนขึ้นรายการได้ยินทีมเทคนิคพูดถึงสคริปต์คำถามที่หายไปหนึ่งชุด จอมอนิเตอร์หลังเวทีแสดงไฟล์ที่ถูกเปิดล่าสุดจากบัญชีไม่รู้จัก และผู้ชมกำลังทยอยเข้าสตูดิโอ ภารกิจของเราคือป้องกันการรั่วของข้อมูลรายการและทำให้การออกอากาศดำเนินได้อย่างยุติธรรม",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_debate_prompt_leak_confirmed": "no",
+        "goal_broadcast_started_with_secure_materials": "no",
+        "studio_audience_entry": "ongoing",
+        "prompt_file_status": "one_missing",
+        "monitor_recent_login": "unknown_account",
+        "producer_contact": "reachable",
+        "countdown_to_live_minutes": 8
+      }
+    },
+    {
+      "themes": ["เหนือธรรมชาติ", "เมือง", "ระทึก", "สยองขวัญ"],
+      "situation": "เราเป็นเจ้าของหอพักเก่าที่ลงมาตรวจชั้นใต้ดินตอนฝนตก ไฟนีออนกะพริบและแอ่งน้ำสะท้อนเงาเหมือนมีคนยืนอีกฝั่ง ทั้งที่เรามาคนเดียว ประตูห้องเก็บของเปิดเองทีละนิดแล้วหยุด กลิ่นสนิมเปียกแรงขึ้น ภารกิจของเราคือทำให้ชั้นใต้ดินกลับสู่สภาพปลอดภัยและยืนยันว่าไม่มีสิ่งคุกคามค้างอยู่",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_basement_entity_manifested_hostile": "no",
+        "goal_basement_secured_and_anomaly_dissipated": "no",
+        "basement_light": "flickering",
+        "basement_water_puddles": "present",
+        "storage_door_motion": "opening_slowly",
+        "rust_smell_level": "strong",
+        "outside_weather": "rain"
+      }
+    },
+    {
+      "themes": ["เทคโนโลยี", "เมือง"],
+      "situation": "เราเป็นวิศวกรสัญญาณไฟจราจรในศูนย์ควบคุม เช้านี้แยกใหญ่สองจุดขึ้นไฟเขียวพร้อมกันจากทั้งสี่ทิศ จอแผนผังขึ้นไอคอนกระพริบสีเหลืองและสายโทรศัพท์จากตำรวจจราจรดังต่อเนื่อง ภารกิจของเราคือแก้ความขัดแย้งของสัญญาณให้รถไหลอย่างปลอดภัยก่อนเกิดชนหมู่",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_intersection_multi_direction_collision": "no",
+        "goal_signal_timing_restored_and_traffic_stable": "no",
+        "junction_a_state": "all_green_fault",
+        "junction_b_state": "all_green_fault",
+        "control_panel_alert": "yellow_flashing",
+        "police_call_status": "ringing",
+        "manual_override_switch": "available"
+      }
+    },
+    {
+      "themes": ["ไซไฟ", "เทคโนโลยี"],
+      "situation": "เราเป็นนักชีววิทยาในห้องทดลองพืชสังเคราะห์ ตู้อบเพาะเลี้ยงหมายเลข 7 อุณหภูมิพุ่งเร็วและเถาวัลย์ต้นแบบขยายก้านออกมาชนกระจกเป็นจังหวะ เซ็นเซอร์ความชื้นค้างที่ค่าสูงสุด ประตูห้องล็อกอัตโนมัติรอคำสั่งยืนยัน ภารกิจของเราคือหยุดการขยายตัวผิดปกติและคงความปลอดภัยของห้องทดลอง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_biolab_containment_breach": "no",
+        "goal_growth_anomaly_suppressed_and_lab_safe": "no",
+        "incubator_7_temperature": "rising",
+        "vine_motion": "impacting_glass",
+        "humidity_sensor": "maxed_out",
+        "lab_door_lock": "auto_locked",
+        "override_code_pad": "active"
+      }
+    },
+    {
+      "themes": ["อาชญากรรม", "สืบสวน", "ระทึก"],
+      "situation": "เราเป็นผู้จัดการโรงรับจำนำตอนก่อนปิดร้าน ลูกค้าคนสุดท้ายยื่นเอกสารซื้อขายทองที่ดูเหมือนของจริงแต่เลขซีเรียลบนตราประทับไม่ตรงกับระบบ เขาเริ่มเร่งให้เราจ่ายเงินสดทันทีและมองประตูตลอดเวลา ภารกิจของเราคือยืนยันความถูกต้องเอกสารและป้องกันการฉ้อโกงโดยไม่ให้เงินหลุดออกจากร้าน",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_fraudster_received_cash_with_fake_docs": "no",
+        "goal_document_verification_completed_and_cash_secure": "no",
+        "pawnshop_cash_drawer": "full",
+        "document_serial_match": "mismatch",
+        "customer_demeanor": "impatient",
+        "front_door_status": "open",
+        "verification_terminal": "online"
+      }
+    },
+    {
+      "themes": ["เอาชีวิตรอด", "เมือง", "ระทึก"],
+      "situation": "เราเป็นครูเวรหน้าโรงเรียนช่วงเลิกเรียน รถตู้รับส่งคันหนึ่งมีควันขาวออกจากฝากระโปรงและเด็กยังนั่งคุยอยู่ด้านใน คนปกครองหลายคนยืนใกล้รถเพราะฝนเริ่มตก ภารกิจของเราคือย้ายเด็กและผู้ปกครองออกจากระยะเสี่ยงพร้อมคุมพื้นที่จนรถปลอดภัย",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_school_van_fire_spread_to_crowd": "no",
+        "goal_children_evacuated_and_vehicle_isolated": "no",
+        "van_engine_smoke": "white_heavy",
+        "children_inside_van": 6,
+        "parent_crowd_distance_meters": 1,
+        "rain_intensity": "starting",
+        "fire_blanket_location": "guard_room"
+      }
+    },
+    {
+      "themes": ["เมือง", "เทคโนโลยี"],
+      "situation": "เราเป็นผู้ควบคุมป้ายโฆษณาดิจิทัลกลางสี่แยก จอหลักเกิดภาพแฟลชถี่รุนแรงและเสียงแตกจากลำโพงจนคนมองขึ้นฟ้าแล้วหยุดรถกะทันหัน รถมอเตอร์ไซค์เริ่มชะลอปะปนกันยุ่ง ภารกิจของเราคือหยุดสัญญาณรบกวนของป้ายและคืนการจราจรให้เป็นปกติโดยไม่เกิดอุบัติเหตุ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_billboard_glitch_triggered_traffic_accident": "no",
+        "goal_billboard_output_stabilized_and_flow_normal": "no",
+        "billboard_video_state": "rapid_flicker",
+        "billboard_speaker_state": "distorted",
+        "intersection_vehicle_behavior": "sudden_braking",
+        "remote_shutdown_access": "available",
+        "onsite_technician_eta_minutes": 15
+      }
+    },
+    {
+      "themes": ["ภัยพิบัติ", "เอาชีวิตรอด", "เมือง"],
+      "situation": "เราเป็นอาสาดับเพลิงป่าในชุมชนเชิงเขา ลมเปลี่ยนทิศทำให้ควันหนาทึบพัดเข้าซอยบ้าน แสงส้มจากแนวไฟไกล ๆ เริ่มเห็นชัดขึ้น คนในชุมชนกำลังขนของลงรถแต่มีผู้สูงอายุนั่งรถเข็นอยู่หน้าบ้าน ภารกิจของเราคือพาคนเปราะบางออกจากแนวควันและทำเส้นทางอพยพให้ปลอดภัย",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_wildfire_smoke_trapped_residents": "no",
+        "goal_vulnerable_residents_evacuated_to_clear_air": "no",
+        "wind_direction": "toward_houses",
+        "smoke_density": "heavy",
+        "fireline_visibility": "distant_glow",
+        "wheelchair_user_presence": true,
+        "evac_route_status": "partially_blocked"
+      }
+    },
+    {
+      "themes": ["ตลก", "การเมือง"],
+      "situation": "เราเป็นผู้ช่วยผู้สมัครหาเสียงที่กำลังขึ้นเวทีปราศรัย กล้องถ่ายทอดสดเปิดอยู่ แต่เทเลพรอมป์เตอร์ดันเลื่อนบทผิดไปเป็นสูตรทำต้มยำกุ้ง ผู้สมัครเริ่มอ่านตามจริงจัง คนดูหัวเราะลั่นและทีมงานหลังเวทีแตกตื่น ภารกิจของเราคือกู้บทพูดให้ถูกต้องและพาเวทีกลับมาอยู่ในมือโดยไม่เกิดความโกลาหล",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_campaign_stage_lost_to_uncontrolled_chaos": "no",
+        "goal_correct_script_restored_and_speech_continues": "no",
+        "teleprompter_content": "wrong_recipe_text",
+        "live_broadcast_status": "on_air",
+        "crowd_reaction": "laughter_wave",
+        "stage_manager_location": "backstage_left",
+        "candidate_confidence": "dropping"
+      }
+    },
+    {
+      "themes": ["สืบสวน", "อาชญากรรม"],
+      "situation": "เราเป็นพนักงานรับรถในอู่ซ่อมที่ถูกใช้เป็นจุดส่งของเถื่อนตามข่าว กลางคืนได้ยินเสียงเครื่องยนต์ดับหน้าประตูหลัง รถตู้ไม่มีป้ายทะเบียนถอยเข้ามาและคนขับไม่ยอมเปิดกระจก ไฟโกดังด้านในปิดเกือบหมด ภารกิจของเราคือยืนยันภัยคุกคามและป้องกันไม่ให้การส่งของผิดกฎหมายสำเร็จ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_illegal_dropoff_completed_unchecked": "no",
+        "goal_dropoff_interrupted_and_site_secured": "no",
+        "garage_rear_gate": "open",
+        "van_plate_status": "missing",
+        "driver_window": "closed",
+        "warehouse_lighting": "minimal",
+        "night_watchman_presence": "none_visible"
+      }
+    },
+    {
+      "themes": ["เหนือธรรมชาติ", "ตลก"],
+      "situation": "เราเป็นแอดมินเพจร้านหมูกระทะที่มาถ่ายคอนเทนต์ตอนปิดร้าน พอเปิดกล้องกลับเห็นเก้าอี้ขยับเองทีละตัวเข้าหาโต๊ะเหมือนจะตั้งวงกินต่อ เตาถ่านที่ดับแล้วกลับมีควันลอยเป็นรูปหัวใจ พนักงานฝึกงานหัวเราะทั้งกลัวทั้งขำ ภารกิจของเราคือจัดร้านให้ปลอดภัยและหยุดความป่วนเหนือธรรมชาติแบบไม่ให้ร้านพัง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_restaurant_property_damaged_by_anomaly": "no",
+        "goal_anomaly_calmed_and_shop_ready_for_morning": "no",
+        "chair_movement": "self_sliding",
+        "charcoal_stove_state": "smoke_rekindled",
+        "camera_recording": "on",
+        "intern_presence": "one_nervous_laughing",
+        "front_shutter": "closed"
+      }
+    },
+    {
+      "themes": ["ไซไฟ", "เมือง"],
+      "situation": "เราเป็นคนขับรถส่งพัสดุอัตโนมัติในเขตทดลอง เมืองเปิดเลนพิเศษให้รถไร้คนขับ แต่รถของเราขึ้นแจ้งเตือนว่าเซ็นเซอร์ด้านหน้าถูกกวนสัญญาณจนมองเส้นเลนสลับผิด แผงควบคุมเสนอให้ตัดสินใจโหมดแมนนวลทันที ภารกิจของเราคือป้องกันการชนและพารถพร้อมพัสดุไปจุดปลอดภัย",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_autonomous_van_collision_occurred": "no",
+        "goal_vehicle_switched_safe_mode_and_stopped_securely": "no",
+        "sensor_front_status": "jammed",
+        "lane_detection_state": "unstable",
+        "manual_override_prompt": "active",
+        "cargo_lock_state": "sealed",
+        "traffic_density": "medium"
+      }
+    },
+    {
+      "themes": ["สยองขวัญ", "เหนือธรรมชาติ", "ระทึก"],
+      "situation": "เราเป็นผู้ดูแลหอพักนักศึกษาเก่าที่ปิดซ่อม คืนนี้ไฟทางเดินชั้นสามติด ๆ ดับ ๆ และน้ำจากท่อหยดลงพื้นเป็นจังหวะเหมือนเสียงนับถอยหลัง เมื่อเราเปิดสมุดเช็กห้องกลับเห็นหมายเลขห้องที่ปิดตายถูกติ๊กว่าเข้าใช้เมื่อห้านาทีก่อน ประตูห้องนั้นแง้มเองช้า ๆ และกลิ่นอับเย็นพุ่งออกมา ภารกิจของเราคือปิดเหตุผิดปกติในชั้นนี้และพาตัวเองออกมาโดยไม่ถูกดึงเข้าไปในห้องต้องห้าม",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_protagonist_dragged_into_sealed_room": "no",
+        "goal_sealed_floor_anomaly_ended_and_exit_safe": "no",
+        "dorm_third_floor_lights": "flickering",
+        "sealed_room_door": "slowly_ajar",
+        "hallway_water_drip": "rhythmic",
+        "maintenance_log_entry": "unexpected_recent_access",
+        "air_temperature": "suddenly_cold"
+      }
+    },
+    {
+      "themes": ["สยองขวัญ", "เมือง"],
+      "situation": "เราเป็นคนขับแท็กซี่ช่วงตีสอง รับผู้โดยสารหญิงที่สถานีร้างแต่เธอไม่พูดคำเดียว กระจกมองหลังเห็นเบาะหลังว่างสลับกับมีคนนั่งเมื่อรถผ่านไฟถนนแต่ละดวง มิเตอร์วิ่งเร็วผิดปกติทั้งที่รถติดไฟแดงยาว และประตูหลังล็อกปลดเองซ้ำ ๆ ภารกิจของเราคือพารถไปถึงจุดที่ปลอดภัยและยุติการโดยสารผิดปกตินี้โดยไม่ให้เกิดอุบัติเหตุ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_taxi_crash_during_phantom_ride": "no",
+        "goal_phantom_passenger_incident_resolved_safely": "no",
+        "taxi_meter_state": "rising_while_stopped",
+        "rearview_reflection": "inconsistent",
+        "rear_door_lock_cycle": "auto_toggle",
+        "street_time_period": "late_night",
+        "intersection_traffic_light": "red_long_hold"
+      }
+    },
+    {
+      "themes": ["สยองขวัญ", "สืบสวน"],
+      "situation": "เราเป็นตำรวจเวรดึกในห้องเก็บหลักฐาน ได้ยินเสียงเคาะจากตู้ล็อกที่ไม่ควรมีใครอยู่ ขณะที่กล้องวงจรปิดในห้องแสดงภาพตัวเราเดินอยู่มุมไกลทั้งที่เรายืนหน้าโต๊ะ ประทับตราคดีหนึ่งหล่นจากชั้นโดยไม่มีแรงกระแทก ภารกิจของเราคือรักษาหลักฐานคดีทั้งหมดและหยุดเหตุผิดปกติก่อนข้อมูลคดีเสียหาย",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_evidence_room_chain_of_custody_broken": "no",
+        "goal_evidence_inventory_verified_and_anomaly_stopped": "no",
+        "evidence_room_cctv_feed": "desynced_double_image",
+        "locker_knock_source": "unknown",
+        "case_stamp_position": "fallen_without_contact",
+        "room_access_log": "no_additional_entry",
+        "duty_officer_presence": "alone"
+      }
+    },
+    {
+      "themes": ["สยองขวัญ", "เหนือธรรมชาติ"],
+      "situation": "เราเป็นผู้ช่วยสัปเหร่อในสุสานชุมชนยามค่ำ หมอกต่ำคลุมพื้นและตะเกียงริมทางดับทีละดวง ป้ายชื่อหลุมหนึ่งที่เพิ่งฝังเมื่อวานหันกลับด้านเอง มีเสียงครูดดินมาจากใต้เนินและสุนัขเฝ้าสุสานเห่าถอยหลังไม่ยอมเข้าใกล้ ภารกิจของเราคือหยุดการรบกวนในสุสานและออกจากเขตฝังศพโดยสวัสดิภาพ",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_graveyard_entity_reached_protagonist": "no",
+        "goal_graveyard_disturbance_settled_and_path_cleared": "no",
+        "cemetery_fog_level": "dense_low",
+        "lamp_line_status": "sequentially_off",
+        "new_grave_marker_orientation": "reversed",
+        "soil_sound": "scraping_from_below",
+        "guard_dog_behavior": "retreating_bark"
+      }
+    },
+    {
+      "themes": ["สยองขวัญ", "ระทึก", "เมือง"],
+      "situation": "เราเป็นพนักงานเวรกลางคืนของโรงภาพยนตร์มัลติเพล็กซ์ โรงฉายที่ปิดรอบสุดท้ายยังมีเสียงหัวเราะแผ่วจากลำโพงแม้ตัดไฟไปแล้ว หน้าจอขึ้นภาพเฟรมเดียวเดิมเป็นรูปแถวเก้าอี้ว่าง แต่เงาคนในภาพเพิ่มขึ้นทุกครั้งที่เรากะพริบตา ประตูหนีไฟท้ายโรงล็อกจากด้านในทั้งที่ไม่มีใครเข้าไป ภารกิจของเราคือพาผู้ที่ยังอยู่ในโรงออกให้หมดและปิดเหตุผิดปกติก่อนมีคนติดค้าง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_cinema_occupant_trapped_by_anomaly": "no",
+        "goal_auditorium_cleared_and_anomaly_quieted": "no",
+        "auditorium_power_state": "cut_but_audio_present",
+        "screen_frame_state": "static_with_shift",
+        "emergency_exit_rear": "locked_from_inside",
+        "remaining_occupant_count_estimate": 2,
+        "usher_flashlight": "functional"
+      }
+    },
+    {
+      "themes": ["สยองขวัญ", "ไซไฟ", "เทคโนโลยี"],
+      "situation": "เราเป็นนักพัฒนาระบบบ้านอัจฉริยะที่ถูกเรียกไปแก้บ้านตัวอย่าง ตอนเที่ยงคืนระบบผู้ช่วยเสียงเรียกชื่อเราจากทุกห้องพร้อมกันทั้งที่ปิดไมค์แล้ว เซ็นเซอร์ประตูหน้าต่างรายงานเปิดสลับปิดเร็วผิดมนุษย์ และกล้องภายในส่งภาพช้า 5 วินาทีโดยมีเงาดำผ่านจุดเดิมก่อนเหตุจริง ภารกิจของเราคือตัดการควบคุมผิดปกติและทำให้บ้านกลับสู่สถานะปลอดภัยก่อนมีคนติดอยู่ในระบบล็อก",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_smart_home_lockdown_trapped_occupants": "no",
+        "goal_control_system_isolated_and_home_safe_mode": "no",
+        "voice_assistant_status": "calling_name_multiroom",
+        "door_sensor_activity": "rapid_open_close",
+        "camera_feed_delay_seconds": 5,
+        "network_router_access": "available",
+        "master_override_panel": "in_hallway"
+      }
+    },
+    {
+      "themes": ["เมือง", "ตลก"],
+      "situation": "เราเป็นพ่อครัวหน้าเตาในร้านข้าวมันไก่ช่วงเที่ยง หม้อข้าวมันใบหลักเดือดล้นจนควันพวยและลูกค้าต่อคิวยาวถึงหน้าร้าน ผู้ช่วยใหม่ดันหยิบเกลือแทนน้ำตาลลงหม้อน้ำจิ้มแล้วหน้าซีด ทั้งเตาอีกฝั่งมีหม้อซุปกำลังจะแห้ง ภารกิจของเราคือกู้รสชาติและคุมครัวให้เสิร์ฟทันโดยไม่เกิดอุบัติเหตุลวกหรือไฟไหม้",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_kitchen_burn_or_fire_from_rush": "no",
+        "goal_lunch_service_stabilized_with_safe_stations": "no",
+        "rice_pot_status": "boiling_over",
+        "sauce_mix_error": "salt_instead_of_sugar",
+        "soup_pot_level": "very_low",
+        "queue_length": "long",
+        "assistant_experience": "new"
+      }
+    },
+    {
+      "themes": ["ทำอาหาร", "เมือง", "ระทึก"],
+      "situation": "เราเป็นเชฟร้านสเต็กที่ครัวเปิดโชว์ ลูกค้าเห็นทุกอย่างผ่านกระจกหน้าเตา จู่ ๆ ระบบดูดควันฝั่งกริลล์หยุดทำงานและเปลวไฟพุ่งสูงจากไขมันสะสม กลิ่นไหม้กระจายเร็ว พนักงานเสิร์ฟสองคนยืนใกล้ทางผ่านแคบ ภารกิจของเราคือดับความเสี่ยงหน้าเตาและพาครัวกลับมาทำงานได้อย่างปลอดภัยก่อนลูกค้าแตกตื่น",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_grill_flareup_caused_kitchen_injury": "no",
+        "goal_exhaust_restored_and_service_continued_safely": "no",
+        "grill_flame_height": "high_flare",
+        "exhaust_fan_status": "offline",
+        "grease_level": "heavy",
+        "service_corridor_width": "narrow",
+        "fire_blanket_location": "wall_hook"
+      }
+    },
+    {
+      "themes": ["ทำอาหาร", "ตลก", "เทคโนโลยี"],
+      "situation": "เราเป็นสตรีมเมอร์สายทำอาหารไลฟ์สด เมนูไข่ตุ๋นหม้อใหญ่กำลังจะเสิร์ฟ แต่เตาอินดักชันอัจฉริยะเชื่อมแอปผิดโหมดและสลับอุณหภูมิขึ้นลงเอง ผู้ชมในแชตพิมพ์รัวว่าเหมือนรถไฟเหาะ ไมโครโฟนโดนไอน้ำจนเสียงแตก ภารกิจของเราคือคุมเตาให้เสถียรและทำเมนูจบอย่างปลอดภัยโดยไม่ให้หม้อไหม้หรือแตก",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_cooking_stream_accident_from_unstable_heat": "no",
+        "goal_dish_completed_and_equipment_stabilized": "no",
+        "induction_mode_state": "app_desynced",
+        "temperature_curve": "oscillating",
+        "steam_level": "high",
+        "chat_reaction_speed": "rapid",
+        "microphone_audio_quality": "crackling"
+      }
+    },
+    {
+      "themes": ["ทำอาหาร", "เอาชีวิตรอด"],
+      "situation": "เราเป็นหัวหน้าแคมป์บนภูเขาและต้องทำอาหารเย็นให้ทีมท่ามกลางลมแรง เตาแก๊สสนามติด ๆ ดับ ๆ และถังน้ำสะอาดเหลือไม่มาก เสียงฟ้าร้องดังใกล้ขึ้นทุกนาที ขณะเนื้อยังดิบครึ่งกระทะ ภารกิจของเราคือจัดการการทำอาหารให้ปลอดภัยและทุกคนได้อาหารสุกพอก่อนอากาศแย่ลง",
+      "worldState": {
+        "system_protagonist_alive": "yes",
+        "rule_team_food_poisoning_or_hypothermia": "no",
+        "goal_safe_meal_prepared_before_storm_peak": "no",
+        "camp_stove_flame": "flickering",
+        "clean_water_supply": "limited",
+        "thunder_distance": "near",
+        "meal_cook_progress": "half_done",
+        "team_member_count": 5
       }
     }
   ]
