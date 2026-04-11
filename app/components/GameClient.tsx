@@ -1,581 +1,29 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
 import {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
-import { createSocket } from "@/lib/socket-client";
-import { MAX_PLAYER_ACTION_LENGTH } from "@/lib/game-limits";
-import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useSearchParams } from "next/navigation";
+import { BlindProtocolAsciiTitle } from "@/app/components/game/blind-protocol-ascii-title";
+import { EndGameConfirmDialog } from "@/app/components/game/end-game-confirm-dialog";
+import { GameHomeView } from "@/app/components/game/game-home-view";
+import { GameLobbyView } from "@/app/components/game/game-lobby-view";
+import { GameSessionView } from "@/app/components/game/game-session-view";
+import type { PublicRoomState as RoomState } from "@/lib/public-room-state";
 import {
-  isMissionWon,
-  isSystemProtagonistPlayable,
-  SYSTEM_LOG_PLAYER_ID,
-} from "@/lib/world-state";
-import { BLIND_PROTOCOL_ASCII } from "@/lib/blind-protocol-ascii";
-
-type WorldState = Record<string, string | number | boolean>;
-
-type VoteOutcome = {
-  accusedId: string;
-  imposterId: string;
-  crewWon: boolean;
-  missionSucceeded?: boolean;
-  tally: { playerId: string; count: number }[];
-};
-
-type VoteTieInfo = {
-  tallies: { playerId: string; count: number }[];
-  tiedPlayerIds: string[];
-};
-
-type RoomState = {
-  id: string;
-  players: { id: string; name: string; role?: "imposter" | "normal" }[];
-  logs: { playerId: string; action: string; narrative?: string }[];
-  currentTurn: number;
-  roundIndex: number;
-  phase: "lobby" | "playing" | "voting" | "end";
-  worldState: WorldState;
-  situation?: string;
-  lobbyTheme: string;
-  votes: Record<string, string>;
-  voteOutcome?: VoteOutcome;
-  voteTieInfo?: VoteTieInfo;
-};
+  GAME_SESSION_STORAGE_KEY,
+  JOIN_CODE_LENGTH,
+} from "@/lib/game-api-constants";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
 
 type UiTheme = "light" | "dark";
-
-function tallyStats(tallies: { playerId: string; count: number }[] | undefined) {
-  const map = new Map<string, number>();
-  let max = 0;
-  if (tallies) {
-    for (const t of tallies) {
-      map.set(t.playerId, t.count);
-      if (t.count > max) max = t.count;
-    }
-  }
-  return { map, max };
-}
-
-/** Vote correctly identified the imposter (same as `crewWon` on the server). */
-function endScreenHeadline(
-  role: "imposter" | "normal" | undefined,
-  missionSucceeded: boolean | undefined,
-  voteCorrect: boolean | undefined
-): "win" | "lose" | "gameover" | "unknown" {
-  if (!role || missionSucceeded === undefined || voteCorrect === undefined) {
-    return "unknown";
-  }
-  if (role === "normal") {
-    if (missionSucceeded && voteCorrect) return "win";
-    if (!missionSucceeded && !voteCorrect) return "lose";
-    return "gameover";
-  }
-  if (missionSucceeded && voteCorrect) return "lose";
-  if (!missionSucceeded && !voteCorrect) return "win";
-  return "gameover";
-}
-
-/**
- * Eight outcomes: mission success/fail × vote correct/wrong × role (crew vs imposter).
- * GAME OVER uses its own copy so the subtitle always explains the stalemate.
- */
-function voteOutcomeSubtitle(
-  role: "imposter" | "normal" | undefined,
-  missionSucceeded: boolean | undefined,
-  voteCorrect: boolean | undefined
-): string {
-  if (!role || missionSucceeded === undefined || voteCorrect === undefined) {
-    return "This round is over.";
-  }
-  const ms = missionSucceeded;
-  const vc = voteCorrect;
-
-  if (role === "normal") {
-    if (ms && vc) {
-      return "Mission succeeded and the crew voted for the real Imposter. Crew wins.";
-    }
-    if (ms && !vc) {
-      return "Mission succeeded, but the vote missed the Imposter. Game over—no clear winner.";
-    }
-    if (!ms && vc) {
-      return "Mission failed even though the crew exposed the Imposter. Game over—no clear winner.";
-    }
-    return "Mission failed and the vote missed the Imposter. Crew loses.";
-  }
-
-  if (ms && vc) {
-    return "Mission succeeded, but the crew identified you as the Imposter. You lose.";
-  }
-  if (ms && !vc) {
-    return "Mission succeeded and you stayed hidden from the vote. Game over—no clear winner.";
-  }
-  if (!ms && vc) {
-    return "Mission failed and the crew voted for you. Game over—no clear winner.";
-  }
-  return "Mission failed and the vote missed you. You win.";
-}
-
-const ROLE_COPY: Record<
-  "imposter" | "normal",
-  { title: string; body: string; className: string }
-> = {
-  imposter: {
-    title: "Imposter",
-    body: "Blend in. You may steer the group toward failure.",
-    className: "crt-card border-[3px]",
-  },
-  normal: {
-    title: "Crew",
-    body: "Help the mission succeed for this scenario.",
-    className: "crt-card border-[3px]",
-  },
-};
-
-function BlindProtocolAsciiTitle() {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const preRef = useRef<HTMLPreElement>(null);
-
-  const fitAsciiFont = useCallback(() => {
-    const wrap = wrapRef.current;
-    const pre = preRef.current;
-    if (!wrap || !pre) return;
-    /** Padding for rounding / font metrics so UA <pre> scrollbars never appear. */
-    const maxW = Math.max(0, wrap.clientWidth - 8);
-    if (maxW < 12) return;
-
-    const MIN_PX = 12;
-    /** Cap keeps fit stable; layout uses full viewport width via bleed wrapper. */
-    const MAX_PX = 128;
-    let lo = MIN_PX;
-    let hi = MAX_PX;
-    for (let i = 0; i < 28; i++) {
-      const mid = (lo + hi) / 2;
-      wrap.style.setProperty("--ascii-title-font-size", `${mid}px`);
-      if (pre.scrollWidth <= maxW) lo = mid;
-      else hi = mid;
-    }
-    let best = Math.max(MIN_PX, Math.floor(lo * 10) / 10);
-    wrap.style.setProperty("--ascii-title-font-size", `${best}px`);
-    for (let step = 0; step < 40; step++) {
-      if (
-        pre.scrollWidth <= maxW &&
-        pre.scrollHeight <= pre.clientHeight &&
-        pre.scrollWidth <= pre.clientWidth
-      ) {
-        break;
-      }
-      best = Math.max(MIN_PX, Math.round((best - 0.25) * 100) / 100);
-      wrap.style.setProperty("--ascii-title-font-size", `${best}px`);
-    }
-  }, []);
-
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap) return;
-    fitAsciiFont();
-    const ro = new ResizeObserver(() => {
-      requestAnimationFrame(fitAsciiFont);
-    });
-    ro.observe(wrap);
-    void document.fonts.ready.then(() => {
-      requestAnimationFrame(fitAsciiFont);
-    });
-    return () => ro.disconnect();
-  }, [fitAsciiFont]);
-
-  return (
-    <>
-      <h1 className="crt-title-plain max-w-full px-1 text-center font-mono text-3xl font-semibold leading-snug tracking-normal normal-case sm:text-4xl md:sr-only">
-        Blind Protocol
-      </h1>
-      <div
-        ref={wrapRef}
-        className="crt-title-ascii-wrap hidden w-full min-w-0 justify-center md:flex"
-      >
-        <pre
-          ref={preRef}
-          className="crt-title-ascii inline-block max-w-full min-w-0 text-left"
-          aria-hidden
-        >
-          {BLIND_PROTOCOL_ASCII}
-        </pre>
-      </div>
-    </>
-  );
-}
-
-BlindProtocolAsciiTitle.displayName = "BlindProtocolAsciiTitle";
-
-const TYPING_DOT_PHASES = [".", "..", "...", ""] as const;
-
-function TypingEllipsis() {
-  const [phase, setPhase] = useState(0);
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setPhase((p) => (p + 1) % TYPING_DOT_PHASES.length);
-    }, 350);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <span className="font-mono tracking-tight" aria-hidden>
-      {TYPING_DOT_PHASES[phase]}
-    </span>
-  );
-}
-
-TypingEllipsis.displayName = "TypingEllipsis";
-
-const NARRATION_SPIN_FRAMES = ["/", "-", "\\", "|"] as const;
-
-function NarrationSpinner() {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setI((x) => (x + 1) % NARRATION_SPIN_FRAMES.length);
-    }, 90);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <span
-      className="inline-block min-w-[1ch] text-center font-mono"
-      aria-hidden
-    >
-      {NARRATION_SPIN_FRAMES[i]}
-    </span>
-  );
-}
-
-NarrationSpinner.displayName = "NarrationSpinner";
-
-type TypewriterBlockProps = {
-  text: string;
-  charDelayMs?: number;
-  /** Extra ms before the first character (default: same as charDelayMs). */
-  startDelayMs?: number;
-  className?: string;
-  /** When false, nothing is rendered (deferred reveal). */
-  play?: boolean;
-  onRevealComplete?: () => void;
-};
-
-function TypewriterBlock({
-  text,
-  charDelayMs = 10,
-  startDelayMs,
-  className,
-  play = true,
-  onRevealComplete,
-}: TypewriterBlockProps) {
-  const [n, setN] = useState(0);
-  const onCompleteRef = useRef(onRevealComplete);
-  const firedRef = useRef(false);
-
-  useLayoutEffect(() => {
-    onCompleteRef.current = onRevealComplete;
-  }, [onRevealComplete]);
-
-  useLayoutEffect(() => {
-    firedRef.current = false;
-  }, [text, play]);
-
-  useLayoutEffect(() => {
-    if (!play) return;
-    if (!text) return;
-    let i = 0;
-    let id: number | undefined;
-    let cancelled = false;
-    const run = () => {
-      if (cancelled) return;
-      i += 1;
-      setN(Math.min(i, text.length));
-      if (i < text.length) {
-        id = window.setTimeout(run, charDelayMs);
-      }
-    };
-    const firstDelay =
-      startDelayMs !== undefined ? startDelayMs : charDelayMs;
-    id = window.setTimeout(run, firstDelay);
-    return () => {
-      cancelled = true;
-      if (id !== undefined) clearTimeout(id);
-    };
-  }, [text, charDelayMs, startDelayMs, play]);
-
-  useEffect(() => {
-    if (!play || !text.length) return;
-    if (n === text.length && !firedRef.current) {
-      firedRef.current = true;
-      onCompleteRef.current?.();
-    }
-  }, [n, text, play]);
-
-  if (!play) return null;
-
-  const visible = text.slice(0, n);
-  const showCursor = text.length > 0 && n < text.length;
-
-  return (
-    <span className={className}>
-      {visible}
-      {showCursor ? (
-        <span className="crt-typewriter-cursor" aria-hidden />
-      ) : null}
-    </span>
-  );
-}
-
-TypewriterBlock.displayName = "TypewriterBlock";
-
-/** When mission outcome follows a log line with action only (no narrative), unlock after paint. */
-type MissionChainUnlockProps = {
-  onUnlock: () => void;
-};
-
-function MissionChainUnlock({ onUnlock }: MissionChainUnlockProps) {
-  useLayoutEffect(() => {
-    onUnlock();
-  }, [onUnlock]);
-  return null;
-}
-
-MissionChainUnlock.displayName = "MissionChainUnlock";
-
-type EndGameConfirmDialogProps = {
-  open: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-};
-
-function EndGameConfirmDialog({
-  open,
-  onCancel,
-  onConfirm,
-}: EndGameConfirmDialogProps) {
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 p-4"
-      role="presentation"
-      onClick={onCancel}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="end-game-confirm-title"
-        className="crt-card max-w-sm w-full rounded-2xl border-2 p-5 shadow-none"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onCancel();
-        }}
-      >
-        <h2
-          id="end-game-confirm-title"
-          className="text-base font-semibold uppercase tracking-wide"
-        >
-          End game?
-        </h2>
-        <p className="mt-3 text-sm leading-relaxed opacity-90">
-          {
-            "This will end the session for everyone and return to the lobby."
-          }
-        </p>
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-medium"
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-semibold"
-            onClick={onConfirm}
-          >
-            End game
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-EndGameConfirmDialog.displayName = "EndGameConfirmDialog";
-
-type LobbyThemePickerProps = {
-  labels: readonly string[];
-  value: string;
-  onSelect: (theme: string) => void;
-  buttonClassName: string;
-  "aria-labelledby"?: string;
-};
-
-function LobbyThemePicker({
-  labels,
-  value,
-  onSelect,
-  buttonClassName,
-  "aria-labelledby": ariaLabelledBy,
-}: LobbyThemePickerProps) {
-  const listId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-
-  const clampIndex = useCallback(
-    (i: number) => Math.min(Math.max(0, i), labels.length - 1),
-    [labels.length]
-  );
-
-  const closeMenu = useCallback(() => setOpen(false), []);
-
-  const openMenu = useCallback(() => {
-    const idx = labels.indexOf(value);
-    setHighlight(idx >= 0 ? idx : 0);
-    setOpen(true);
-  }, [labels, value]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocPointer = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) closeMenu();
-    };
-    document.addEventListener("pointerdown", onDocPointer);
-    return () => document.removeEventListener("pointerdown", onDocPointer);
-  }, [open, closeMenu]);
-
-  useEffect(() => {
-    if (!open || !listRef.current) return;
-    const el = listRef.current.querySelector(
-      `[data-theme-option="${highlight}"]`
-    );
-    el?.scrollIntoView({ block: "nearest" });
-  }, [open, highlight]);
-
-  const pick = (theme: string) => {
-    onSelect(theme);
-    closeMenu();
-  };
-
-  const onButtonKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
-    if (e.key === "Escape") {
-      if (open) {
-        e.preventDefault();
-        closeMenu();
-      }
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (!open) openMenu();
-      else setHighlight((h) => clampIndex(h + 1));
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      if (!open) openMenu();
-      else setHighlight((h) => clampIndex(h - 1));
-      return;
-    }
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      if (open) pick(labels[highlight] ?? value);
-      else openMenu();
-    }
-  };
-
-  return (
-    <div className="relative w-full" ref={rootRef}>
-      <button
-        type="button"
-        className={`${buttonClassName} flex w-full cursor-pointer items-center justify-between gap-2 text-left`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listId}
-        aria-labelledby={ariaLabelledBy}
-        aria-label={ariaLabelledBy ? undefined : "Scenario theme"}
-        aria-activedescendant={
-          open ? `${listId}-opt-${highlight}` : undefined
-        }
-        onClick={() => (open ? closeMenu() : openMenu())}
-        onKeyDown={onButtonKeyDown}
-      >
-        <span className="min-w-0 truncate">{value}</span>
-        <svg
-          className={`size-5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </button>
-      {open ? (
-        <div
-          ref={listRef}
-          id={listId}
-          role="listbox"
-          className="crt-card absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-xl border-2 py-1 backdrop-blur-sm"
-        >
-          {labels.map((label, i) => {
-            const selected = label === value;
-            const active = i === highlight;
-            return (
-              <div
-                key={label}
-                id={`${listId}-opt-${i}`}
-                role="option"
-                aria-selected={selected}
-                data-theme-option={i}
-                className={`mx-1 flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-transparent! px-3 py-2.5 text-left text-sm transition-colors hover:border-(--crt-soft)! hover:bg-[color-mix(in_srgb,var(--crt-panel)_70%,var(--crt-bg)_30%)] select-none ${
-                  selected ? "font-semibold" : "font-medium"
-                }`}
-                onMouseEnter={() => setHighlight(i)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(label)}
-              >
-                <span className="min-w-0 truncate">{label}</span>
-                {selected ? (
-                  <svg
-                    className="size-4 shrink-0"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    xmlns="http://www.w3.org/2000/svg"
-                    aria-hidden
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-LobbyThemePicker.displayName = "LobbyThemePicker";
 
 const THEME_STORAGE_KEY = "blind-protocol-ui-theme";
 const THEME_CHANGE_EVENT = "blind-protocol-ui-theme-change";
@@ -605,14 +53,24 @@ function subscribeThemeChange(onStoreChange: () => void): () => void {
 }
 
 function GameClient() {
+  const searchParams = useSearchParams();
   const uiTheme = useSyncExternalStore(
     subscribeThemeChange,
     readClientTheme,
     () => "dark"
   );
-  const [passcode, setPasscode] = useState("");
+  const [joinCodeInput, setJoinCodeInput] = useState("");
   const [name, setName] = useState("");
+  const [activeRoomId, setActiveRoomId] = useState<string | undefined>(
+    undefined
+  );
+  const [displayJoinCode, setDisplayJoinCode] = useState<string | undefined>(
+    undefined
+  );
   const [isStarting, setIsStarting] = useState(false);
+  /** Home screen: waiting on create/join API */
+  const [homeBusy, setHomeBusy] = useState<null | "create" | "join">(null);
+  const homeLocked = homeBusy !== null;
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [actionInput, setActionInput] = useState("");
   const [error, setError] = useState("");
@@ -623,20 +81,229 @@ function GameClient() {
     playerId: string;
   } | null>(null);
   const [remoteTypingNames, setRemoteTypingNames] = useState<string[]>([]);
-  /** Synced on socket connect so role / turn UI re-renders when id is assigned */
-  const [mySocketId, setMySocketId] = useState<string | undefined>(undefined);
+  const [myPlayerId, setMyPlayerId] = useState<string | undefined>(undefined);
   const [rolePanelOpen, setRolePanelOpen] = useState(true);
   /** Local pick before confirming vote (server stores vote only after Confirm). */
   const [voteSelectionId, setVoteSelectionId] = useState<string | null>(null);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
-  const socketRef = useRef<ReturnType<typeof createSocket> | null>(null);
+  const [voteSubmitting, setVoteSubmitting] = useState(false);
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+  const [lobbyThemeSaving, setLobbyThemeSaving] = useState(false);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+
+  const supabaseConfigWarning =
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
+      ? ""
+      : "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (or PUBLISHABLE_KEY) for live sync.";
+
+  const typingChannelRef = useRef<RealtimeChannel | null>(null);
+  const typingReadyRef = useRef(false);
   const typingIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
   );
+  const fetchRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const myPlayerIdRef = useRef<string | undefined>(undefined);
+  const roomStateRef = useRef<RoomState | null>(null);
+  const tickDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasJoinedRef = useRef(false);
+
+  useEffect(() => {
+    myPlayerIdRef.current = myPlayerId;
+  }, [myPlayerId]);
+
+  useEffect(() => {
+    roomStateRef.current = roomState;
+  }, [roomState]);
+
+  const pullGameState = useCallback(async () => {
+    const res = await fetch("/api/game/state", { credentials: "include" });
+    const data = (await res.json()) as {
+      joined?: boolean;
+      roomId?: string;
+      joinCode?: string;
+      playerId?: string;
+      state?: RoomState;
+      error?: string;
+    };
+    if (!res.ok) {
+      if (data.error) setError(data.error);
+      return;
+    }
+    if (!data.joined) {
+      if (wasJoinedRef.current) {
+        void fetch("/api/game/leave", {
+          method: "POST",
+          credentials: "include",
+        });
+      }
+      wasJoinedRef.current = false;
+      setActiveRoomId(undefined);
+      setDisplayJoinCode(undefined);
+      setRoomState(null);
+      setMyPlayerId(undefined);
+      setIsStarting(false);
+      setHomeBusy(null);
+      setVoteSubmitting(false);
+      setActionSubmitting(false);
+      setLobbyThemeSaving(false);
+      setResetSubmitting(false);
+      setBeatPending(null);
+      setGmThinking(false);
+      setRemoteTypingNames([]);
+      try {
+        sessionStorage.removeItem(GAME_SESSION_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    wasJoinedRef.current = true;
+    if (data.roomId) setActiveRoomId(data.roomId);
+    if (data.joinCode) setDisplayJoinCode(data.joinCode);
+    setRoomState(data.state ?? null);
+    if (data.playerId) {
+      setMyPlayerId(data.playerId);
+      try {
+        sessionStorage.setItem(
+          GAME_SESSION_STORAGE_KEY,
+          JSON.stringify({
+            roomId: data.roomId,
+            playerId: data.playerId,
+            joinCode: data.joinCode,
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+    if (data.state && data.state.phase !== "lobby") setIsStarting(false);
+    setBeatPending((prev) => {
+      if (!prev || !data.state) return null;
+      const hit = data.state.logs.some(
+        (l) => l.playerId === prev.playerId && l.action === prev.actionLine
+      );
+      return hit ? null : prev;
+    });
+  }, []);
+
+  useEffect(() => {
+    fetchRef.current = pullGameState;
+  }, [pullGameState]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- bootstrap from GET /api/game/state */
+    void pullGameState();
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [pullGameState]);
+
+  const scheduleTickRefetch = useCallback(() => {
+    if (tickDebounceRef.current) clearTimeout(tickDebounceRef.current);
+    tickDebounceRef.current = setTimeout(() => {
+      tickDebounceRef.current = null;
+      void fetchRef.current?.();
+    }, 80);
+  }, []);
+
+  useEffect(() => {
+    if (!activeRoomId) return;
+    const sb = createBrowserSupabase();
+    if (!sb) return;
+
+    const ch = sb
+      .channel(`game-room-tick-${activeRoomId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_room_ticks",
+          filter: `room_id=eq.${activeRoomId}`,
+        },
+        () => {
+          scheduleTickRefetch();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (tickDebounceRef.current) clearTimeout(tickDebounceRef.current);
+      void sb.removeChannel(ch);
+    };
+  }, [activeRoomId, scheduleTickRefetch]);
+
+  useEffect(() => {
+    if (!activeRoomId) return;
+    const sb = createBrowserSupabase();
+    if (!sb) return;
+
+    const ch = sb
+      .channel(`blind-protocol-typing-${activeRoomId}`, {
+        config: { broadcast: { ack: false } },
+      })
+      .on(
+        "broadcast",
+        { event: "typing" },
+        (payload: { payload?: Record<string, unknown> }) => {
+          const pl = payload?.payload;
+          if (!pl || typeof pl !== "object") return;
+          const pid = typeof pl.playerId === "string" ? pl.playerId : "";
+          const pname =
+            typeof pl.name === "string" ? pl.name.trim() : "";
+          const typing = Boolean(pl.typing);
+          if (!pid || !pname) return;
+          if (pid === myPlayerIdRef.current) return;
+
+          const existing = remoteTypingRef.current.get(pid);
+          if (existing) clearTimeout(existing);
+
+          if (!typing) {
+            remoteTypingRef.current.delete(pid);
+            setRemoteTypingNames((names) => names.filter((n) => n !== pname));
+            return;
+          }
+
+          setRemoteTypingNames((names) =>
+            names.includes(pname) ? names : [...names, pname]
+          );
+
+          const t = setTimeout(() => {
+            remoteTypingRef.current.delete(pid);
+            setRemoteTypingNames((names) => names.filter((n) => n !== pname));
+          }, 2000);
+          remoteTypingRef.current.set(pid, t);
+        }
+      )
+      .subscribe((status) => {
+        typingReadyRef.current = status === "SUBSCRIBED";
+      });
+
+    typingChannelRef.current = ch;
+    const typingTimeouts = remoteTypingRef.current;
+    return () => {
+      typingReadyRef.current = false;
+      typingChannelRef.current = null;
+      for (const t of typingTimeouts.values()) clearTimeout(t);
+      typingTimeouts.clear();
+      void sb.removeChannel(ch);
+    };
+  }, [activeRoomId]);
 
   const flushTypingEmit = useCallback((typing: boolean) => {
-    socketRef.current?.emit("player_typing", { typing });
+    const ch = typingChannelRef.current;
+    if (!ch || !typingReadyRef.current) return;
+    const id = myPlayerIdRef.current;
+    if (!id) return;
+    const rs = roomStateRef.current;
+    const pname = rs?.players.find((p) => p.id === id)?.name?.trim();
+    if (!pname) return;
+    void ch.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { playerId: id, name: pname, typing },
+    });
   }, []);
 
   const scheduleTypingStop = useCallback(() => {
@@ -647,167 +314,231 @@ function GameClient() {
     }, 1200);
   }, [flushTypingEmit]);
 
-  const connect = useCallback(() => {
-    if (socketRef.current?.connected) return;
-    const socket = createSocket();
-    socketRef.current = socket;
-
-    socket.on("session_cleared", () => {
-      setRoomState(null);
-      setIsStarting(false);
-      setBeatPending(null);
-      setGmThinking(false);
-      setRemoteTypingNames([]);
-    });
-
-    socket.on("room_update", (state: RoomState) => {
-      setRoomState(state);
-      if (state.phase !== "lobby") setIsStarting(false);
-      setBeatPending((prev) => {
-        if (!prev) return null;
-        const hit = state.logs.some(
-          (l) => l.playerId === prev.playerId && l.action === prev.actionLine
-        );
-        return hit ? null : prev;
-      });
-    });
-
-    socket.on("action_pending", (payload: { playerId?: string; actionLine?: string }) => {
-      const pid = payload?.playerId;
-      const line = payload?.actionLine?.trim();
-      if (!pid || !line) return;
-      setBeatPending({ playerId: pid, actionLine: line });
-    });
-
-    socket.on("new_log", (logs: { playerId: string; action: string; narrative?: string }[]) => {
-      setRoomState((prev) =>
-        prev ? { ...prev, logs: [...prev.logs, ...logs] } : null
-      );
-      setBeatPending((prev) => {
-        if (!prev) return null;
-        if (logs.some((l) => l.playerId === prev.playerId && l.action === prev.actionLine)) {
-          return null;
-        }
-        return prev;
-      });
-    });
-
-    socket.on("phase_change", (phase: string) => {
-      setRoomState((prev) => (prev ? { ...prev, phase: phase as RoomState["phase"] } : null));
-    });
-
-    socket.on("gm_thinking", (payload: { active?: boolean }) => {
-      setGmThinking(Boolean(payload?.active));
-    });
-
-    socket.on("beat_aborted", () => {
-      setBeatPending(null);
-      setGmThinking(false);
-    });
-
-    socket.on(
-      "player_typing",
-      (payload: { playerId?: string; name?: string; typing?: boolean }) => {
-        const pid = payload?.playerId;
-        const pname = payload?.name?.trim();
-        if (!pid || !pname) return;
-        if (pid === socket.id) return;
-
-        const existing = remoteTypingRef.current.get(pid);
-        if (existing) clearTimeout(existing);
-
-        if (!payload?.typing) {
-          remoteTypingRef.current.delete(pid);
-          setRemoteTypingNames((names) => names.filter((n) => n !== pname));
-          return;
-        }
-
-        setRemoteTypingNames((names) =>
-          names.includes(pname) ? names : [...names, pname]
-        );
-
-        const t = setTimeout(() => {
-          remoteTypingRef.current.delete(pid);
-          setRemoteTypingNames((names) => names.filter((n) => n !== pname));
-        }, 2000);
-        remoteTypingRef.current.set(pid, t);
-      }
-    );
-
-    socket.on("error", (payload: { message: string }) => {
-      setError(payload.message);
-      setIsStarting(false);
-      setBeatPending(null);
-      setGmThinking(false);
-    });
-
-    socket.on("connect", () => {
-      setMySocketId(socket.id ?? undefined);
-    });
-    socket.on("disconnect", () => {
-      setMySocketId(undefined);
-    });
-
-    socket.connect();
-  }, []);
-
   useEffect(() => {
-    connect();
-    return () => {
-      if (typingIdleRef.current) clearTimeout(typingIdleRef.current);
-      for (const t of remoteTypingRef.current.values()) clearTimeout(t);
-      remoteTypingRef.current.clear();
-      setMySocketId(undefined);
-      socketRef.current?.disconnect();
+    const sendLeave = () => {
+      if (typeof navigator.sendBeacon !== "function") return;
+      navigator.sendBeacon(
+        `${window.location.origin}/api/game/leave`,
+        new Blob([], { type: "application/json" })
+      );
     };
-  }, [connect]);
+    window.addEventListener("beforeunload", sendLeave);
+    return () => window.removeEventListener("beforeunload", sendLeave);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.uiTheme = uiTheme;
   }, [uiTheme]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- sync join field from ?join= / ?code= */
+    const raw = searchParams.get("join") ?? searchParams.get("code");
+    if (!raw) return;
+    const normalized = raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, JOIN_CODE_LENGTH);
+    if (normalized.length > 0) setJoinCodeInput(normalized);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [searchParams]);
 
   const handleThemeChange = (theme: UiTheme) => {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
     window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
   };
 
-  const handleEnter = () => {
+  const handleCreateRoom = async () => {
     setError("");
-    if (!passcode.trim() || !name.trim()) {
-      setError("Passcode and name required");
+    if (!name.trim()) {
+      setError("Enter your display name");
       return;
     }
-    socketRef.current?.emit("enter", {
-      passcode: passcode.trim(),
-      name: name.trim(),
-    });
+    setHomeBusy("create");
+    try {
+      const res = await fetch("/api/game/rooms/create", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: name.trim() }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        roomId?: string;
+        joinCode?: string;
+        playerId?: string;
+        state?: RoomState;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Could not create room");
+        return;
+      }
+      if (data.roomId) setActiveRoomId(data.roomId);
+      if (data.joinCode) setDisplayJoinCode(data.joinCode);
+      if (data.playerId) setMyPlayerId(data.playerId);
+      if (data.state) setRoomState(data.state);
+      if (data.roomId && data.playerId) {
+        try {
+          sessionStorage.setItem(
+            GAME_SESSION_STORAGE_KEY,
+            JSON.stringify({
+              roomId: data.roomId,
+              playerId: data.playerId,
+              joinCode: data.joinCode,
+            })
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+      wasJoinedRef.current = true;
+    } finally {
+      setHomeBusy(null);
+    }
   };
 
-  const confirmVote = () => {
-    if (!voteSelectionId || !socketRef.current) return;
-    socketRef.current.emit("vote", { targetId: voteSelectionId });
+  const handleJoinRoom = async () => {
+    setError("");
+    if (!name.trim()) {
+      setError("Enter your display name");
+      return;
+    }
+    const code = joinCodeInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (code.length !== JOIN_CODE_LENGTH) {
+      setError(`Join code must be ${JOIN_CODE_LENGTH} characters`);
+      return;
+    }
+    setHomeBusy("join");
+    try {
+      const res = await fetch("/api/game/rooms/join", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          joinCode: code,
+          displayName: name.trim(),
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        roomId?: string;
+        joinCode?: string;
+        playerId?: string;
+        state?: RoomState;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Could not join room");
+        return;
+      }
+      if (data.roomId) setActiveRoomId(data.roomId);
+      if (data.joinCode) setDisplayJoinCode(data.joinCode);
+      if (data.playerId) setMyPlayerId(data.playerId);
+      if (data.state) setRoomState(data.state);
+      if (data.roomId && data.playerId) {
+        try {
+          sessionStorage.setItem(
+            GAME_SESSION_STORAGE_KEY,
+            JSON.stringify({
+              roomId: data.roomId,
+              playerId: data.playerId,
+              joinCode: data.joinCode,
+            })
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+      wasJoinedRef.current = true;
+    } finally {
+      setHomeBusy(null);
+    }
   };
 
-  const handleResetGame = () => {
-    socketRef.current?.emit("reset_game");
-    setEndGameConfirmOpen(false);
+  const confirmVote = async () => {
+    if (!voteSelectionId) return;
+    setVoteSubmitting(true);
+    try {
+      const res = await fetch("/api/game/vote", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: voteSelectionId }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Vote failed");
+        return;
+      }
+      await pullGameState();
+    } finally {
+      setVoteSubmitting(false);
+    }
+  };
+
+  const handleResetGame = async () => {
+    setResetSubmitting(true);
+    try {
+      const res = await fetch("/api/game/reset", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Reset failed");
+        return;
+      }
+      setEndGameConfirmOpen(false);
+      setMyPlayerId(undefined);
+      setActiveRoomId(undefined);
+      setDisplayJoinCode(undefined);
+      try {
+        sessionStorage.removeItem(GAME_SESSION_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      await pullGameState();
+    } finally {
+      setResetSubmitting(false);
+    }
   };
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- sync vote UI with server votes */
     if (!roomState || roomState.phase !== "voting") {
       setVoteSelectionId(null);
       return;
     }
     if (
-      mySocketId &&
+      myPlayerId &&
       roomState.votes &&
-      Object.hasOwn(roomState.votes, mySocketId)
+      Object.hasOwn(roomState.votes, myPlayerId)
     ) {
       setVoteSelectionId(null);
     }
-  }, [roomState, mySocketId]);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [roomState, myPlayerId]);
 
-  const handleStartGame = () => {
+  const handleSetLobbyTheme = async (theme: string) => {
+    setError("");
+    setLobbyThemeSaving(true);
+    try {
+      const res = await fetch("/api/game/set-lobby-theme", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Could not set theme");
+        return;
+      }
+      await pullGameState();
+    } finally {
+      setLobbyThemeSaving(false);
+    }
+  };
+
+  const handleStartGame = async () => {
     setError("");
     if (!roomState) return;
     const themeToUse = roomState.lobbyTheme?.trim() ?? "";
@@ -816,117 +547,78 @@ function GameClient() {
       return;
     }
     setIsStarting(true);
-    socketRef.current?.emit("start_game", { theme: themeToUse });
+    const res = await fetch("/api/game/start", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: themeToUse }),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setIsStarting(false);
+      setError(data.error ?? "Could not start");
+      return;
+    }
+    await pullGameState();
   };
 
-  const handleAction = () => {
+  const handleAction = async () => {
     setError("");
     if (!actionInput.trim() || !roomState) return;
-    const socket = socketRef.current;
-    if (!socket?.id) return;
+    if (!myPlayerId) return;
     const currentPlayer = roomState.players[roomState.currentTurn];
-    if (!currentPlayer || currentPlayer.id !== socket.id) return;
+    if (!currentPlayer || currentPlayer.id !== myPlayerId) return;
 
     const actionLine = `${currentPlayer.name}: ${actionInput.trim()}`;
-    setBeatPending({ actionLine, playerId: socket.id });
+    setActionSubmitting(true);
+    setBeatPending({ actionLine, playerId: myPlayerId });
     flushTypingEmit(false);
-    socket.emit("action", { action: actionInput.trim() });
+    const actionText = actionInput.trim();
     setActionInput("");
+    setGmThinking(true);
+    try {
+      const res = await fetch("/api/game/action", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: actionText }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        beatAborted?: boolean;
+      };
+      if (!res.ok) {
+        if (data.beatAborted) {
+          setBeatPending(null);
+        }
+        setError(data.error ?? "Action failed");
+        return;
+      }
+      await pullGameState();
+    } finally {
+      setGmThinking(false);
+      setActionSubmitting(false);
+    }
   };
-
-  const isMyTurn =
-    roomState &&
-    roomState.phase === "playing" &&
-    isSystemProtagonistPlayable(roomState.worldState) &&
-    roomState.players[roomState.currentTurn]?.id === mySocketId;
 
   const myRole =
     roomState &&
-    mySocketId &&
+    myPlayerId &&
     (roomState.phase === "playing" ||
       roomState.phase === "voting" ||
       roomState.phase === "end")
-      ? roomState.players.find((p) => p.id === mySocketId)?.role
-      : undefined;
-  const myPlayerName =
-    roomState && mySocketId
-      ? roomState.players.find((p) => p.id === mySocketId)?.name
+      ? roomState.players.find((p) => p.id === myPlayerId)?.role
       : undefined;
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- open role panel when role is assigned */
     if (myRole) setRolePanelOpen(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [myRole]);
 
   const themeFieldLabelId = useId();
   const rolePanelContentId = useId();
-
-  const logs = roomState?.logs;
-  const missionOutcomeIdx = useMemo(() => {
-    if (!logs?.length) return -1;
-    return logs.findIndex(
-      (l) =>
-        l.playerId === SYSTEM_LOG_PLAYER_ID &&
-        l.action === "[MISSION OUTCOME]"
-    );
-  }, [logs]);
-
-  const [missionChainDone, setMissionChainDone] = useState(false);
-
-  useEffect(() => {
-    /* Reset typed-chain unlock when the mission outcome row appears or is removed. */
-    /* eslint-disable react-hooks/set-state-in-effect */
-    if (missionOutcomeIdx <= 0) {
-      setMissionChainDone(true);
-    } else {
-      setMissionChainDone(false);
-    }
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [missionOutcomeIdx]);
-
-  const missionOutcomeUnlocked =
-    missionOutcomeIdx <= 0 || missionChainDone;
-
-  const unlockMissionOutcome = useCallback(() => {
-    setMissionChainDone(true);
-  }, []);
-
   const logScrollContainerRef = useRef<HTMLDivElement>(null);
-  const prevLogLenForScrollRef = useRef<number | null>(null);
-  const prevMissionUnlockedForScrollRef = useRef(false);
-  const prevBeatForScrollRef = useRef(false);
-
-  useLayoutEffect(() => {
-    const len = roomState?.logs?.length ?? 0;
-    if (len === 0 && !beatPending) {
-      prevLogLenForScrollRef.current = null;
-      prevMissionUnlockedForScrollRef.current = false;
-      prevBeatForScrollRef.current = false;
-      return;
-    }
-
-    const unlocked = missionOutcomeUnlocked;
-    const prevLen = prevLogLenForScrollRef.current;
-    const prevUnlocked = prevMissionUnlockedForScrollRef.current;
-    const hasBeat = Boolean(beatPending);
-    const prevHasBeat = prevBeatForScrollRef.current;
-
-    const shouldScroll =
-      prevLen === null
-        ? len > 0 || hasBeat
-        : len > prevLen ||
-          (!prevUnlocked && unlocked) ||
-          (!prevHasBeat && hasBeat);
-
-    prevLogLenForScrollRef.current = len;
-    prevMissionUnlockedForScrollRef.current = unlocked;
-    prevBeatForScrollRef.current = hasBeat;
-
-    if (!shouldScroll) return;
-
-    const el = logScrollContainerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [roomState?.logs?.length, missionOutcomeUnlocked, beatPending]);
 
   const lobbyControlShell =
     "w-full min-h-12 rounded-xl border-2 px-4 py-3 text-base font-medium transition-colors";
@@ -971,6 +663,14 @@ function GameClient() {
           </button>
         </div>
       </header>
+      {supabaseConfigWarning ? (
+        <p
+          className="w-full rounded-lg border border-amber-600/50 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          {supabaseConfigWarning}
+        </p>
+      ) : null}
       {showGameTitle ? (
         <div className="crt-title-ascii-bleed self-stretch w-full min-w-0">
           <div className="relative left-1/2 box-border w-svw max-w-svw shrink-0 -translate-x-1/2 overflow-hidden px-3 sm:px-6">
@@ -986,646 +686,62 @@ function GameClient() {
       )}
 
       {!roomState ? (
-        <div className="flex flex-col gap-4 w-full max-w-md items-center text-center">
-          <h2 className="text-lg font-medium text-zinc-800 dark:text-zinc-200">
-            Enter passcode to access
-          </h2>
-          <label className="flex flex-col gap-1 text-zinc-800 dark:text-zinc-200 w-full text-left">
-            <span>Passcode</span>
-            <input
-              type="password"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              placeholder="Enter passcode"
-              className="crt-action-input w-full rounded-lg border-2 border-violet-200 py-2 pl-3 text-zinc-900 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-zinc-100"
-              onKeyDown={(e) => e.key === "Enter" && handleEnter()}
-              suppressHydrationWarning
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-zinc-800 dark:text-zinc-200 w-full text-left">
-            <span>Your name</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter name"
-              className="crt-action-input w-full rounded-lg border-2 border-violet-200 py-2 pl-3 text-zinc-900 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-zinc-100"
-              onKeyDown={(e) => e.key === "Enter" && handleEnter()}
-              suppressHydrationWarning
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handleEnter}
-            disabled={!passcode.trim() || !name.trim()}
-            className={lobbyPrimaryBtnClass}
-          >
-            Enter
-          </button>
-        </div>
+        <GameHomeView
+          name={name}
+          setName={setName}
+          joinCodeInput={joinCodeInput}
+          setJoinCodeInput={setJoinCodeInput}
+          homeLocked={homeLocked}
+          homeBusy={homeBusy}
+          lobbyPrimaryBtnClass={lobbyPrimaryBtnClass}
+          onCreateRoom={handleCreateRoom}
+          onJoinRoom={handleJoinRoom}
+        />
       ) : roomState.phase === "lobby" ? (
-        <div className="flex flex-col gap-6 w-full max-w-md items-center text-center">
-          <p className="w-full text-left text-xs font-semibold tracking-wide">
-            Players:
-          </p>
-          <div className="flex flex-wrap justify-center gap-3 w-full">
-            {roomState.players.length === 0 ? (
-              <div className="crt-card-muted rounded-xl border border-dashed px-5 py-4 text-sm">
-                No players yet
-              </div>
-            ) : (
-              roomState.players.map((p) => (
-                <div
-                  key={p.id}
-                  className="crt-card rounded-xl border px-4 py-3 min-w-26"
-                >
-                  <p className="text-sm font-semibold">
-                    {p.name}
-                    {p.id === mySocketId ? " (YOU)" : ""}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-          {SCENARIO_THEME_LABELS.length === 0 ? (
-            <p className="text-sm text-rose-600 dark:text-rose-400" role="status">
-              No themes in scenarios — add{" "}
-              <code className="text-xs bg-violet-100/80 dark:bg-violet-950/50 px-1 rounded">
-                data/scenarios.json
-              </code>
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2 text-zinc-800 dark:text-zinc-200 w-full text-left">
-              <span className="text-sm font-medium" id={themeFieldLabelId}>
-                Theme
-              </span>
-              <LobbyThemePicker
-                labels={SCENARIO_THEME_LABELS}
-                value={
-                  roomState.lobbyTheme &&
-                  SCENARIO_THEME_LABELS.includes(roomState.lobbyTheme)
-                    ? roomState.lobbyTheme
-                    : SCENARIO_THEME_LABELS[0] ?? ""
-                }
-                onSelect={(theme) => {
-                  setError("");
-                  socketRef.current?.emit("set_lobby_theme", { theme });
-                }}
-                buttonClassName={lobbySelectClass}
-                aria-labelledby={themeFieldLabelId}
-              />
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleStartGame}
-            disabled={
-              roomState.players.length < 2 ||
-              isStarting ||
-              SCENARIO_THEME_LABELS.length === 0 ||
-              !SCENARIO_THEME_LABELS.includes(roomState.lobbyTheme?.trim() ?? "")
-            }
-            className={lobbyStartBtnClass}
-          >
-            {isStarting ? "Starting…" : "Start game"}
-          </button>
-          <div className="flex w-full justify-center border-t border-violet-200/50 pt-4 dark:border-violet-800/30">
-            <button
-              type="button"
-              onClick={() => setEndGameConfirmOpen(true)}
-              className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-semibold"
-            >
-              End game
-            </button>
-          </div>
-        </div>
+        <GameLobbyView
+          roomState={roomState}
+          displayJoinCode={displayJoinCode}
+          myPlayerId={myPlayerId}
+          themeFieldLabelId={themeFieldLabelId}
+          lobbySelectClass={lobbySelectClass}
+          lobbyStartBtnClass={lobbyStartBtnClass}
+          isStarting={isStarting}
+          lobbyThemeSaving={lobbyThemeSaving}
+          onStartGame={handleStartGame}
+          onSetLobbyTheme={handleSetLobbyTheme}
+          onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}
+        />
       ) : (
-        <div className="flex flex-col gap-3 w-full">
-          {roomState.phase === "end" && roomState.voteOutcome ? null : (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 flex w-full flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-              <span className="capitalize">Phase: {roomState.phase}</span>
-              {roomState.phase === "playing" &&
-              roomState.players.length > 0 ? (
-                <span className="shrink-0 text-right">
-                  Turn{" "}
-                  {(roomState.roundIndex ?? 0) * roomState.players.length +
-                    roomState.currentTurn +
-                    1}
-                  /{3 * roomState.players.length}
-                </span>
-              ) : null}
-            </p>
-          )}
+        <GameSessionView
+          roomState={roomState}
+          myPlayerId={myPlayerId}
+          voteSelectionId={voteSelectionId}
+          setVoteSelectionId={setVoteSelectionId}
+          voteSubmitting={voteSubmitting}
+          onConfirmVote={() => void confirmVote()}
+          actionInput={actionInput}
+          setActionInput={setActionInput}
+          actionSubmitting={actionSubmitting}
+          onSendAction={() => void handleAction()}
+          flushTypingEmit={flushTypingEmit}
+          scheduleTypingStop={scheduleTypingStop}
+          typingIdleRef={typingIdleRef}
+          rolePanelOpen={rolePanelOpen}
+          setRolePanelOpen={setRolePanelOpen}
+          rolePanelContentId={rolePanelContentId}
+          logScrollContainerRef={logScrollContainerRef}
+          remoteTypingNames={remoteTypingNames}
+          beatPending={beatPending}
+          gmThinking={gmThinking}
+          onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}
+        />
 
-          {roomState.phase === "end" && roomState.voteOutcome ? (
-            <div className="flex flex-col gap-4">
-              {(() => {
-                const vo = roomState.voteOutcome;
-                if (!vo) return null;
-                const r = mySocketId
-                  ? roomState.players.find((p) => p.id === mySocketId)?.role
-                  : undefined;
-                const missionSucceeded =
-                  vo.missionSucceeded ?? isMissionWon(roomState.worldState);
-                const headline = endScreenHeadline(
-                  r,
-                  missionSucceeded,
-                  vo.crewWon
-                );
-                const youWin = headline === "win";
-                const youLose = headline === "lose";
-                return (
-                  <div
-                    className="crt-hr-border px-6 py-10 text-center"
-                    role="status"
-                  >
-                    <p className="text-4xl font-black tracking-tight sm:text-5xl">
-                      {youWin
-                        ? "YOU WIN"
-                        : youLose
-                          ? "YOU LOSE"
-                          : "GAME OVER"}
-                    </p>
-                    <p className="mx-auto mt-4 max-w-md text-base font-medium leading-relaxed opacity-90 sm:text-lg">
-                      {voteOutcomeSubtitle(
-                        r,
-                        missionSucceeded,
-                        vo.crewWon
-                      )}
-                    </p>
-                  </div>
-                );
-              })()}
-              <div className="grid gap-3 sm:grid-cols-2">
-                {roomState.players.map((p) => {
-                  const { map: finalMap, max: finalTop } = tallyStats(
-                    roomState.voteOutcome?.tally
-                  );
-                  const vCount = finalMap.get(p.id) ?? 0;
-                  const isTopVote =
-                    finalTop > 0 && vCount === finalTop;
-                  return (
-                    <div
-                      key={p.id}
-                      className={`crt-end-tally px-4 py-4 text-center ${
-                        isTopVote ? "crt-end-tally--top" : "opacity-85"
-                      }`}
-                    >
-                      <p className="text-lg font-bold">{p.name}</p>
-                      <p
-                        className={`mt-1 text-sm font-semibold tabular-nums ${
-                          isTopVote ? "" : "opacity-70"
-                        }`}
-                      >
-                        {vCount} vote{vCount === 1 ? "" : "s"}
-                      </p>
-                      <p
-                        className={`mt-2 text-sm font-semibold uppercase tracking-wide ${
-                          isTopVote ? "" : "opacity-70"
-                        }`}
-                      >
-                        {p.role === "imposter" ? "Imposter" : "Crew"}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-
-          {myRole && !roomState.voteOutcome ? (
-            <div
-              className={`overflow-hidden rounded-2xl ${ROLE_COPY[myRole].className}`}
-            >
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-black/4 dark:hover:bg-white/6"
-                onClick={() => setRolePanelOpen((open) => !open)}
-                aria-expanded={rolePanelOpen}
-                aria-controls={rolePanelContentId}
-              >
-                <span className="shrink-0 text-[11px] font-bold tracking-wide opacity-75">
-                  {myPlayerName ? `${myPlayerName}. You are:` : "You are:"}
-                </span>
-                <span className="min-w-0 flex-1" aria-hidden />
-                <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs font-semibold opacity-85">
-                  {rolePanelOpen ? "Hide" : "Show"}
-                  <svg
-                    className={`size-4 transition-transform duration-200 ${rolePanelOpen ? "rotate-180" : ""}`}
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    xmlns="http://www.w3.org/2000/svg"
-                    aria-hidden
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </span>
-              </button>
-              {rolePanelOpen ? (
-                <div
-                  id={rolePanelContentId}
-                  className="crt-role-panel-body px-5 pb-5 pt-4 text-center"
-                >
-                  <p className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-                    {ROLE_COPY[myRole].title}
-                  </p>
-                  <p className="mx-auto mt-3 max-w-md text-base font-medium leading-relaxed opacity-90">
-                    {ROLE_COPY[myRole].body}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {roomState.phase === "playing" ? (
-            <div className="text-center">
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
-                Current turn
-              </p>
-              <p className="mt-1 text-2xl font-bold text-violet-950 sm:text-3xl dark:text-violet-50">
-                {roomState.players[roomState.currentTurn]?.name ?? "—"}
-                {isMyTurn && (
-                  <span className="text-xl font-semibold text-emerald-700 sm:text-2xl dark:text-emerald-300">
-                    {" "}
-                    (you)
-                  </span>
-                )}
-              </p>
-            </div>
-          ) : null}
-
-          {!(
-            roomState.phase === "end" && roomState.voteOutcome
-          ) ? (
-          <div className="crt-readable-surface rounded-lg border p-3 text-sm">
-            {roomState.situation ? (
-              <div className="mb-3">
-                <p className="mb-1 font-medium">
-                  Situation
-                </p>
-                <p>
-                  <TypewriterBlock
-                    key={roomState.situation}
-                    text={roomState.situation}
-                    charDelayMs={8}
-                  />
-                </p>
-              </div>
-            ) : null}
-            <div
-              className={
-                roomState.situation
-                  ? "border-t border-(--crt-border) pt-3"
-                  : ""
-              }
-            >
-              <h2 className="text-base font-semibold">
-                Log
-              </h2>
-              {remoteTypingNames.length > 0 ? (
-                <p
-                  className="crt-typing-indicator mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs"
-                  aria-live="polite"
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <span>{remoteTypingNames.join(", ")}</span>
-                    <TypingEllipsis />
-                    <span className="sr-only">typing</span>
-                  </span>
-                </p>
-              ) : null}
-              <div
-                ref={logScrollContainerRef}
-                className="mt-2 max-h-48 overflow-y-auto py-1"
-              >
-                {roomState.logs.length === 0 && !beatPending && !gmThinking ? (
-                  <p className="opacity-70">No actions yet.</p>
-                ) : (
-                  <>
-                    {roomState.logs.map((log, i) => {
-                      const isMissionOutcome =
-                        log.playerId === SYSTEM_LOG_PLAYER_ID &&
-                        log.action === "[MISSION OUTCOME]";
-                      if (isMissionOutcome) {
-                        if (!missionOutcomeUnlocked) return null;
-                        const won = isMissionWon(roomState.worldState);
-                        return (
-                          <div
-                            key={`${i}-mission`}
-                            className="mb-4 mt-10 w-full last:mb-0 sm:mt-12"
-                            role="status"
-                          >
-                            <p
-                              className={`w-full text-center font-medium ${
-                                won
-                                  ? "text-emerald-700 dark:text-emerald-400"
-                                  : "text-rose-600 dark:text-rose-400"
-                              }`}
-                            >
-                              <TypewriterBlock
-                                key={log.narrative ?? "mission"}
-                                text={log.narrative ?? ""}
-                                charDelayMs={10}
-                                startDelayMs={550}
-                                className="inline-block max-w-full text-center"
-                              />
-                            </p>
-                          </div>
-                        );
-                      }
-                      const chainFromThis =
-                        missionOutcomeIdx > 0 && i === missionOutcomeIdx - 1;
-                      return (
-                        <div key={i} className="mb-4 last:mb-0">
-                          <p className="font-medium">{log.action}</p>
-                          {chainFromThis && !log.narrative ? (
-                            <MissionChainUnlock
-                              onUnlock={unlockMissionOutcome}
-                            />
-                          ) : null}
-                          {log.narrative ? (
-                            <div className="mt-1.5">
-                              <p className="mb-0.5 text-xs font-semibold">
-                                Narration
-                              </p>
-                              <p className="text-sm opacity-85">
-                                <TypewriterBlock
-                                  key={`${i}-n-${log.narrative}`}
-                                  text={log.narrative}
-                                  charDelayMs={10}
-                                  onRevealComplete={
-                                    chainFromThis
-                                      ? unlockMissionOutcome
-                                      : undefined
-                                  }
-                                />
-                              </p>
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                    {beatPending ? (
-                      <div className="mb-2">
-                        <p className="font-medium">{beatPending.actionLine}</p>
-                        {gmThinking ? (
-                          <div className="mt-1.5">
-                            <p className="mb-0.5 text-xs font-semibold">
-                              Narration
-                            </p>
-                            <p
-                              className="text-sm opacity-85 inline-flex min-h-[1.25em] flex-wrap items-baseline gap-x-1.5"
-                              aria-live="polite"
-                            >
-                              <NarrationSpinner />
-                              <span className="sr-only">
-                                Generating narration
-                              </span>
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {gmThinking && !beatPending ? (
-                      <div className="mb-2">
-                        <p className="mb-0.5 text-xs font-semibold">
-                          Narration
-                        </p>
-                        <p
-                          className="text-sm opacity-85 inline-flex min-h-[1.25em] flex-wrap items-baseline gap-x-1.5"
-                          aria-live="polite"
-                        >
-                          <NarrationSpinner />
-                          <span className="sr-only">Generating narration</span>
-                        </p>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-          ) : null}
-
-          {roomState.phase === "voting" && roomState.players.length > 0 ? (
-            <div className="crt-vote-panel rounded-2xl border-2 p-5">
-              <h2 className="text-center text-xl font-bold">
-                Vote for the Imposter
-              </h2>
-              {roomState.voteTieInfo ? (
-                <div
-                  className="crt-vote-tie-banner mt-3 px-3 py-3 text-sm"
-                  role="status"
-                >
-                  <p className="font-bold">Vote tied — vote again.</p>
-                  <p className="mt-1 text-xs opacity-90">
-                    Last-round counts are shown on each name below.
-                  </p>
-                </div>
-              ) : null}
-              <p className="mt-1 text-center text-sm text-zinc-600 dark:text-zinc-400">
-                {Object.keys(roomState.votes ?? {}).length}/
-                {roomState.players.length} votes — select a player, then confirm
-              </p>
-              {mySocketId &&
-              roomState.votes &&
-              Object.hasOwn(roomState.votes, mySocketId) ? (
-                <p className="mt-3 text-center text-sm font-semibold">
-                  Your vote:{" "}
-                  {roomState.players.find(
-                    (x) => x.id === roomState.votes[mySocketId]
-                  )?.name ?? "—"}
-                </p>
-              ) : null}
-              <div
-                className="mt-4 grid gap-3 sm:grid-cols-2"
-                role="radiogroup"
-                aria-label="Choose who you think is the Imposter"
-              >
-                {roomState.players.map((p) => {
-                  const hasVoted = Boolean(
-                    mySocketId &&
-                      roomState.votes &&
-                      Object.hasOwn(roomState.votes, mySocketId)
-                  );
-                  const selected = voteSelectionId === p.id;
-                  const { map: prevTallyMap, max: prevTop } = tallyStats(
-                    roomState.voteTieInfo?.tallies
-                  );
-                  const prevCount = prevTallyMap.get(p.id) ?? 0;
-                  const prevIsTop =
-                    Boolean(roomState.voteTieInfo) &&
-                    prevTop > 0 &&
-                    prevCount === prevTop;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      disabled={hasVoted}
-                      onClick={() =>
-                        setVoteSelectionId((prev) =>
-                          prev === p.id ? null : p.id
-                        )
-                      }
-                      className={`crt-vote-target rounded-xl border-2 px-4 py-5 text-center text-lg font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                        selected ? "crt-vote-target--selected" : ""
-                      } ${
-                        prevIsTop && !selected
-                          ? "crt-vote-target--tie-hint"
-                          : ""
-                      }`}
-                    >
-                      <span className="block">{p.name}</span>
-                      {roomState.voteTieInfo ? (
-                        <span className="mt-2 block text-sm font-semibold tabular-nums opacity-90">
-                          Last round: {prevCount} vote
-                          {prevCount === 1 ? "" : "s"}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-              {mySocketId &&
-              roomState.votes &&
-              !Object.hasOwn(roomState.votes, mySocketId) ? (
-                <button
-                  type="button"
-                  onClick={confirmVote}
-                  disabled={!voteSelectionId}
-                  className="crt-btn-cta mt-4 w-full min-h-12 rounded-xl border-2 px-4 py-3 text-base font-bold disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  Confirm vote
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          {roomState.phase === "playing" && (
-            <div className="flex gap-2">
-              <div className="relative min-w-0 flex-1">
-                <input
-                  type="text"
-                  value={actionInput}
-                  suppressHydrationWarning
-                  onChange={(e) => {
-                    const v = e.target.value.slice(0, MAX_PLAYER_ACTION_LENGTH);
-                    setActionInput(v);
-                    if (isMyTurn && v.trim().length > 0) {
-                      flushTypingEmit(true);
-                      scheduleTypingStop();
-                    } else if (isMyTurn && v.trim().length === 0) {
-                      if (typingIdleRef.current) {
-                        clearTimeout(typingIdleRef.current);
-                        typingIdleRef.current = null;
-                      }
-                      flushTypingEmit(false);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (typingIdleRef.current) {
-                      clearTimeout(typingIdleRef.current);
-                      typingIdleRef.current = null;
-                    }
-                    flushTypingEmit(false);
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && handleAction()}
-                  placeholder={isMyTurn ? "Your action…" : "Waiting for your turn…"}
-                  disabled={!isMyTurn}
-                  maxLength={MAX_PLAYER_ACTION_LENGTH}
-                  className={`crt-action-input w-full rounded-lg border-2 border-violet-200 py-2 text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-zinc-100 ${
-                    isMyTurn ? "pl-3 pr-14" : "px-3"
-                  }`}
-                  aria-describedby={
-                    isMyTurn ? "action-char-count" : undefined
-                  }
-                />
-                {isMyTurn ? (
-                  <span
-                    id="action-char-count"
-                    className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs tabular-nums text-zinc-400 dark:text-zinc-500"
-                    aria-live="polite"
-                  >
-                    {actionInput.length}/{MAX_PLAYER_ACTION_LENGTH}
-                  </span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={handleAction}
-                disabled={!isMyTurn || !actionInput.trim()}
-                className="crt-btn-cta shrink-0 self-stretch rounded-lg px-4 py-2 font-medium disabled:opacity-50"
-              >
-                Send
-              </button>
-            </div>
-          )}
-
-          {roomState.phase === "playing" &&
-          Object.keys(roomState.worldState ?? {}).length > 0 ? (
-            <details className="text-sm text-zinc-700 dark:text-zinc-300">
-              <summary className="cursor-pointer text-violet-800 dark:text-violet-300">
-                World state
-              </summary>
-              <pre className="mt-1 p-2 rounded-lg border border-violet-200/60 dark:border-violet-800/40 bg-white/50 dark:bg-violet-950/20 overflow-x-auto">
-                {JSON.stringify(roomState.worldState, null, 2)}
-              </pre>
-            </details>
-          ) : null}
-
-          {!(
-            roomState.phase === "end" && roomState.voteOutcome
-          ) ? (
-            <div className="flex flex-col gap-2 border-t border-violet-200/50 pt-2 dark:border-violet-800/30">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                Players
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {roomState.players.length === 0 ? (
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    —
-                  </span>
-                ) : (
-                  roomState.players.map((p) => (
-                    <div
-                      key={p.id}
-                      className="inline-flex items-center rounded-md border border-zinc-200/70 px-1.5 py-0.5 dark:border-zinc-700/40"
-                    >
-                      <span className="text-[11px] font-normal leading-tight text-zinc-500 dark:text-zinc-500">
-                        {p.name}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          {(roomState.phase === "playing" ||
-            roomState.phase === "voting" ||
-            roomState.phase === "end") && (
-            <div className="flex w-full justify-center border-t border-violet-200/50 pt-4 dark:border-violet-800/30">
-              <button
-                type="button"
-                onClick={() => setEndGameConfirmOpen(true)}
-                className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-semibold"
-              >
-                End game
-              </button>
-            </div>
-          )}
-        </div>
       )}
       <EndGameConfirmDialog
         open={endGameConfirmOpen}
+        confirmLoading={resetSubmitting}
         onCancel={() => setEndGameConfirmOpen(false)}
-        onConfirm={handleResetGame}
+        onConfirm={() => void handleResetGame()}
       />
     </section>
   );
