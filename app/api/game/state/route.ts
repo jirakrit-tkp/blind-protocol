@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { hostLlmToPublicSettings } from "@/lib/host-llm-config";
 import { getPublicRoomState } from "@/lib/public-room-state";
 import { loadGameRoom } from "@/lib/game-storage";
 import { isSupabaseConfigured } from "@/lib/supabase/service";
@@ -38,12 +39,18 @@ export async function GET() {
     }
 
     const joined = loaded.room.players.some((p) => p.id === playerId);
+    const state = joined ? getPublicRoomState(loaded.room, playerId) : null;
+    const hostLlmSettings = joined
+      ? hostLlmToPublicSettings(loaded.room.hostLlm)
+      : undefined;
+
     return NextResponse.json({
       joined,
       roomId: joined ? roomId : undefined,
       joinCode: joined ? loaded.joinCode : undefined,
       playerId: joined ? playerId : undefined,
-      state: joined ? getPublicRoomState(loaded.room, playerId) : null,
+      state,
+      hostLlmSettings,
     });
   } catch (e) {
     console.error("GET /api/game/state", e);

@@ -1,4 +1,10 @@
 import { randomUUID } from "crypto";
+import {
+  coerceHostLlmFromSnapshot,
+  isRoomHost,
+  mergeHostLlmUpdate,
+  type SetHostLlmBody,
+} from "./host-llm-config";
 import type { Player, Room, RoomLog } from "./types";
 import { MAX_PLAYER_ACTION_LENGTH } from "./game-limits";
 import { formatLogsForGmPrompt } from "./gm-log-format";
@@ -82,6 +88,8 @@ export function normalizeRoom(raw: unknown, roomId: string): Room {
   if (o.voteOutcome && typeof o.voteOutcome === "object") {
     base.voteOutcome = o.voteOutcome as Room["voteOutcome"];
   }
+  const hostLlm = coerceHostLlmFromSnapshot(o.hostLlm);
+  if (hostLlm) base.hostLlm = hostLlm;
   base.id = roomId;
   return base;
 }
@@ -128,6 +136,7 @@ async function runAftermathNarration(room: Room, situation: string): Promise<voi
         situation,
         recentEvents,
         worldState: room.worldState,
+        hostLlm: room.hostLlm,
       });
     Object.assign(room.worldState, sceneUpdates);
     Object.assign(room.worldState, outcomeUpdates);
@@ -257,6 +266,27 @@ export function handleSetLobbyTheme(
   return { ok: true, room: r };
 }
 
+export function handleSetHostLlm(
+  room: Room,
+  playerId: string,
+  body: SetHostLlmBody
+): { ok: true; room: Room } | { ok: false; error: string } {
+  const r = getRoomForPlayer(room, playerId);
+  if (!r || r.phase !== "lobby") {
+    return {
+      ok: false,
+      error: "AI settings can only be changed in the lobby before the game starts",
+    };
+  }
+  if (!isRoomHost(r, playerId)) {
+    return { ok: false, error: "Only the room host can change AI credentials" };
+  }
+  const merged = mergeHostLlmUpdate(r.hostLlm, body);
+  if (!merged.ok) return { ok: false, error: merged.error };
+  r.hostLlm = merged.config;
+  return { ok: true, room: r };
+}
+
 export function handleStartGame(
   room: Room,
   playerId: string,
@@ -365,6 +395,7 @@ export async function handlePlayerAction(
         recentActions,
         playerAction: action,
         worldState: r.worldState,
+        hostLlm: r.hostLlm,
       });
       narrative = result.narrative;
       missionPossible = result.missionPossible;

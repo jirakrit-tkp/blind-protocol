@@ -13,6 +13,17 @@ export type RoomLog = {
 /** World state - situation-specific key-value store (e.g. cockpit_lock_status, engine_condition) */
 export type WorldState = Record<string, string | number | boolean>;
 
+/** Host-only LLM overrides; stored in room snapshot, never sent in public client state. */
+export type HostLlmRoomConfig = {
+  useCustomLlm: boolean;
+  provider: "ollama" | "openai";
+  ollamaHost: string;
+  ollamaModel: string;
+  openaiBaseUrl: string;
+  openaiModel: string;
+  openaiApiKey?: string;
+};
+
 export type Room = {
   id: string;
   players: Player[];
@@ -27,6 +38,8 @@ export type Room = {
   situation?: string;
   /** Selected scenario theme in lobby; broadcast to all players in real time */
   lobbyTheme: string;
+  /** Server-only in practice: excluded from `getPublicRoomState`. */
+  hostLlm?: HostLlmRoomConfig;
   /** During `voting`: voter socket id → accused player id (one vote per voter). */
   votes: Record<string, string>;
   /** After a tied vote: counts and who tied; votes cleared for a new round. */

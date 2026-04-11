@@ -15,12 +15,17 @@ import { EndGameConfirmDialog } from "@/app/components/game/end-game-confirm-dia
 import { GameHomeView } from "@/app/components/game/game-home-view";
 import { GameLobbyView } from "@/app/components/game/game-lobby-view";
 import { GameSessionView } from "@/app/components/game/game-session-view";
+import { RoomAiGmMenu } from "@/app/components/game/room-ai-gm-menu";
 import type { PublicRoomState as RoomState } from "@/lib/public-room-state";
 import {
   GAME_SESSION_STORAGE_KEY,
   JOIN_CODE_LENGTH,
 } from "@/lib/game-api-constants";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import type {
+  HostLlmSettingsPublic,
+  SetHostLlmBody,
+} from "@/lib/host-llm-config";
 import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
 
 type UiTheme = "light" | "dark";
@@ -89,6 +94,10 @@ function GameClient() {
   const [voteSubmitting, setVoteSubmitting] = useState(false);
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [lobbyThemeSaving, setLobbyThemeSaving] = useState(false);
+  const [hostLlmSettings, setHostLlmSettings] =
+    useState<HostLlmSettingsPublic | null>(null);
+  const [hostLlmSaving, setHostLlmSaving] = useState(false);
+  const [hostLlmFormNonce, setHostLlmFormNonce] = useState(0);
   const [resetSubmitting, setResetSubmitting] = useState(false);
 
   const supabaseConfigWarning =
@@ -126,6 +135,7 @@ function GameClient() {
       joinCode?: string;
       playerId?: string;
       state?: RoomState;
+      hostLlmSettings?: HostLlmSettingsPublic;
       error?: string;
     };
     if (!res.ok) {
@@ -149,6 +159,8 @@ function GameClient() {
       setVoteSubmitting(false);
       setActionSubmitting(false);
       setLobbyThemeSaving(false);
+      setHostLlmSettings(null);
+      setHostLlmSaving(false);
       setResetSubmitting(false);
       setBeatPending(null);
       setGmThinking(false);
@@ -164,6 +176,7 @@ function GameClient() {
     if (data.roomId) setActiveRoomId(data.roomId);
     if (data.joinCode) setDisplayJoinCode(data.joinCode);
     setRoomState(data.state ?? null);
+    setHostLlmSettings(data.hostLlmSettings ?? null);
     if (data.playerId) {
       setMyPlayerId(data.playerId);
       try {
@@ -517,6 +530,28 @@ function GameClient() {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [roomState, myPlayerId]);
 
+  const handleSaveHostLlm = async (body: SetHostLlmBody) => {
+    setError("");
+    setHostLlmSaving(true);
+    try {
+      const res = await fetch("/api/game/host-llm", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Could not save AI settings");
+        return;
+      }
+      setHostLlmFormNonce((n) => n + 1);
+      await pullGameState();
+    } finally {
+      setHostLlmSaving(false);
+    }
+  };
+
   const handleSetLobbyTheme = async (theme: string) => {
     setError("");
     setLobbyThemeSaving(true);
@@ -631,11 +666,35 @@ function GameClient() {
   const showGameTitle =
     !roomState || roomState.phase === "lobby";
 
+  const isRoomHost = Boolean(
+    roomState && myPlayerId && roomState.players[0]?.id === myPlayerId
+  );
+  const canEditRoomLlm = Boolean(
+    isRoomHost && roomState?.phase === "lobby"
+  );
+  const roomLlmReadOnlyNotice =
+    !canEditRoomLlm &&
+    isRoomHost &&
+    roomState &&
+    roomState.phase !== "lobby"
+      ? "เกมเริ่มแล้ว — แก้ไขการตั้งค่าได้เฉพาะใน lobby (ก่อนกด Start)"
+      : undefined;
+
   return (
     <section className="crt-ui flex max-w-2xl w-full flex-col items-center gap-6 p-6">
-      <header className="flex w-full items-center justify-end">
+      <header className="flex w-full flex-wrap items-start justify-end gap-2">
+        {roomState && hostLlmSettings ? (
+          <RoomAiGmMenu
+            settings={hostLlmSettings}
+            formNonce={hostLlmFormNonce}
+            saving={hostLlmSaving}
+            onSave={handleSaveHostLlm}
+            canEdit={canEditRoomLlm}
+            readOnlyNotice={roomLlmReadOnlyNotice}
+          />
+        ) : null}
         <div
-          className="crt-mode-toggle inline-flex items-center rounded-md border"
+          className="crt-mode-toggle inline-flex shrink-0 items-center rounded-md border"
           role="group"
           aria-label="Choose light or dark theme"
         >
@@ -707,6 +766,7 @@ function GameClient() {
           lobbyStartBtnClass={lobbyStartBtnClass}
           isStarting={isStarting}
           lobbyThemeSaving={lobbyThemeSaving}
+          hostLlmSaving={hostLlmSaving}
           onStartGame={handleStartGame}
           onSetLobbyTheme={handleSetLobbyTheme}
           onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}

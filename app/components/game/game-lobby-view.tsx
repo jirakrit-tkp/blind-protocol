@@ -14,6 +14,7 @@ export type GameLobbyViewProps = {
   lobbyStartBtnClass: string;
   isStarting: boolean;
   lobbyThemeSaving: boolean;
+  hostLlmSaving: boolean;
   onStartGame: () => void;
   onSetLobbyTheme: (theme: string) => Promise<void>;
   onOpenEndGameConfirm: () => void;
@@ -28,6 +29,7 @@ export function GameLobbyView({
   lobbyStartBtnClass,
   isStarting,
   lobbyThemeSaving,
+  hostLlmSaving,
   onStartGame,
   onSetLobbyTheme,
   onOpenEndGameConfirm,
@@ -109,6 +111,7 @@ export function GameLobbyView({
           roomState.players.length < 2 ||
           isStarting ||
           lobbyThemeSaving ||
+          hostLlmSaving ||
           SCENARIO_THEME_LABELS.length === 0 ||
           !SCENARIO_THEME_LABELS.includes(roomState.lobbyTheme?.trim() ?? "")
         }
