@@ -19,7 +19,7 @@ export function EndGameConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 px-4 py-4 sm:px-5 sm:py-5"
       role="presentation"
       onClick={onCancel}
     >

@@ -2,11 +2,15 @@ import { randomUUID } from "crypto";
 import {
   coerceHostLlmFromSnapshot,
   isRoomHost,
+  isRoomLlmConfigured,
   mergeHostLlmUpdate,
   type SetHostLlmBody,
 } from "./host-llm-config";
 import type { Player, Room, RoomLog } from "./types";
-import { MAX_PLAYER_ACTION_LENGTH } from "./game-limits";
+import {
+  MAX_DISPLAY_NAME_LENGTH,
+  MAX_PLAYER_ACTION_LENGTH,
+} from "./game-limits";
 import { formatLogsForGmPrompt } from "./gm-log-format";
 import { runThreeLayerAftermathStep, runThreeLayerPlayerTurn } from "./ollama";
 import {
@@ -234,18 +238,50 @@ export function handleJoin(
   room: Room,
   name: string
 ): { ok: true; room: Room; playerId: string } | { ok: false; error: string } {
-  if (!name.trim()) {
+  const trimmed = name.trim();
+  if (!trimmed) {
     return { ok: false, error: "Name is required" };
+  }
+  if (trimmed.length > MAX_DISPLAY_NAME_LENGTH) {
+    return {
+      ok: false,
+      error: `Name must be at most ${MAX_DISPLAY_NAME_LENGTH} characters`,
+    };
   }
   if (room.phase !== "lobby") {
     return { ok: false, error: "Game already started" };
   }
   const player: Player = {
     id: randomUUID(),
-    name: name.trim(),
+    name: trimmed,
   };
   room.players.push(player);
   return { ok: true, room, playerId: player.id };
+}
+
+export function handleRenameLobbySelf(
+  room: Room,
+  playerId: string,
+  rawName: string | undefined
+): { ok: true; room: Room } | { ok: false; error: string } {
+  const r = getRoomForPlayer(room, playerId);
+  if (!r || r.phase !== "lobby") {
+    return { ok: false, error: "You can only change your name in the lobby" };
+  }
+  const trimmed = rawName?.trim() ?? "";
+  if (!trimmed) {
+    return { ok: false, error: "Name is required" };
+  }
+  if (trimmed.length > MAX_DISPLAY_NAME_LENGTH) {
+    return {
+      ok: false,
+      error: `Name must be at most ${MAX_DISPLAY_NAME_LENGTH} characters`,
+    };
+  }
+  const p = r.players.find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: "Not in a room" };
+  p.name = trimmed;
+  return { ok: true, room: r };
 }
 
 export function handleSetLobbyTheme(
@@ -309,6 +345,14 @@ export function handleStartGame(
     return { ok: false, error: "Pick a theme from the list" };
   }
 
+  if (!isRoomLlmConfigured(r.hostLlm)) {
+    return {
+      ok: false,
+      error:
+        "Host must configure AI (gear menu): save Ollama or OpenAI credentials before starting.",
+    };
+  }
+
   const fromPool = pickRandomScenarioFromPool(theme);
   if (!fromPool) {
     return { ok: false, error: "No scenario available for this theme" };
@@ -354,6 +398,13 @@ export async function handlePlayerAction(
   if (!r) return { ok: false, error: "Not in a room" };
   if (r.phase !== "playing") {
     return { ok: false, error: "Not in playing phase" };
+  }
+  if (!isRoomLlmConfigured(r.hostLlm)) {
+    return {
+      ok: false,
+      error:
+        "This room has no LLM configuration. The host must set credentials in the lobby before starting.",
+    };
   }
   if (!isSystemProtagonistPlayable(r.worldState)) {
     return {

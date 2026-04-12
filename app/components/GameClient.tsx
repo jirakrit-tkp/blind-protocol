@@ -12,6 +12,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useSearchParams } from "next/navigation";
 import { BlindProtocolAsciiTitle } from "@/app/components/game/blind-protocol-ascii-title";
 import { EndGameConfirmDialog } from "@/app/components/game/end-game-confirm-dialog";
+import { GameContentColumn } from "@/app/components/game/game-content-column";
 import { GameHomeView } from "@/app/components/game/game-home-view";
 import { GameLobbyView } from "@/app/components/game/game-lobby-view";
 import { GameSessionView } from "@/app/components/game/game-session-view";
@@ -22,9 +23,11 @@ import {
   JOIN_CODE_LENGTH,
 } from "@/lib/game-api-constants";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
-import type {
-  HostLlmSettingsPublic,
-  SetHostLlmBody,
+import {
+  hostLlmToPublicSettings,
+  type HostLlmSettingsPublic,
+  isRoomLlmReadyPublic,
+  type SetHostLlmBody,
 } from "@/lib/host-llm-config";
 import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
 
@@ -98,6 +101,7 @@ function GameClient() {
     useState<HostLlmSettingsPublic | null>(null);
   const [hostLlmSaving, setHostLlmSaving] = useState(false);
   const [hostLlmFormNonce, setHostLlmFormNonce] = useState(0);
+  const [lobbyRenameSaving, setLobbyRenameSaving] = useState(false);
   const [resetSubmitting, setResetSubmitting] = useState(false);
 
   const supabaseConfigWarning =
@@ -159,6 +163,7 @@ function GameClient() {
       setVoteSubmitting(false);
       setActionSubmitting(false);
       setLobbyThemeSaving(false);
+      setLobbyRenameSaving(false);
       setHostLlmSettings(null);
       setHostLlmSaving(false);
       setResetSubmitting(false);
@@ -176,7 +181,9 @@ function GameClient() {
     if (data.roomId) setActiveRoomId(data.roomId);
     if (data.joinCode) setDisplayJoinCode(data.joinCode);
     setRoomState(data.state ?? null);
-    setHostLlmSettings(data.hostLlmSettings ?? null);
+    setHostLlmSettings(
+      data.hostLlmSettings ?? hostLlmToPublicSettings(undefined)
+    );
     if (data.playerId) {
       setMyPlayerId(data.playerId);
       try {
@@ -573,6 +580,33 @@ function GameClient() {
     }
   };
 
+  const handleRenameLobbyDisplayName = async (
+    displayName: string
+  ): Promise<boolean> => {
+    setError("");
+    setLobbyRenameSaving(true);
+    try {
+      const res = await fetch("/api/game/rename-display-name", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Could not change name");
+        return false;
+      }
+      await pullGameState();
+      return true;
+    } catch {
+      setError("Could not change name");
+      return false;
+    } finally {
+      setLobbyRenameSaving(false);
+    }
+  };
+
   const handleStartGame = async () => {
     setError("");
     if (!roomState) return;
@@ -662,9 +696,11 @@ function GameClient() {
   const lobbyPrimaryBtnClass = `${lobbyControlShell} crt-btn-cta disabled:opacity-50`;
   const lobbyStartBtnClass = `${lobbyControlShell} crt-btn-cta disabled:opacity-50`;
 
-  /** Title only on login + lobby (hidden during play / vote / end). */
-  const showGameTitle =
-    !roomState || roomState.phase === "lobby";
+  /** ASCII title block only before joining a room (home). */
+  const showAsciiTitle = !roomState;
+
+  /** Plain “Blind Protocol” in header whenever joined (lobby matches in-game bar). */
+  const showPlainHeaderTitle = Boolean(roomState);
 
   const isRoomHost = Boolean(
     roomState && myPlayerId && roomState.players[0]?.id === myPlayerId
@@ -672,54 +708,66 @@ function GameClient() {
   const canEditRoomLlm = Boolean(
     isRoomHost && roomState?.phase === "lobby"
   );
+  const roomAiReady = Boolean(
+    hostLlmSettings && isRoomLlmReadyPublic(hostLlmSettings)
+  );
   const roomLlmReadOnlyNotice =
     !canEditRoomLlm &&
     isRoomHost &&
     roomState &&
     roomState.phase !== "lobby"
-      ? "เกมเริ่มแล้ว — แก้ไขการตั้งค่าได้เฉพาะใน lobby (ก่อนกด Start)"
+      ? "Game in progress — AI settings can only be changed in the lobby before Start."
       : undefined;
 
   return (
-    <section className="crt-ui flex max-w-2xl w-full flex-col items-center gap-6 p-6">
-      <header className="flex w-full flex-wrap items-start justify-end gap-2">
-        {roomState && hostLlmSettings ? (
-          <RoomAiGmMenu
-            settings={hostLlmSettings}
-            formNonce={hostLlmFormNonce}
-            saving={hostLlmSaving}
-            onSave={handleSaveHostLlm}
-            canEdit={canEditRoomLlm}
-            readOnlyNotice={roomLlmReadOnlyNotice}
-          />
-        ) : null}
-        <div
-          className="crt-mode-toggle inline-flex shrink-0 items-center rounded-md border"
-          role="group"
-          aria-label="Choose light or dark theme"
-        >
-          <button
-            type="button"
-            onClick={() => handleThemeChange("light")}
-            className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
-              uiTheme === "light" ? "is-active" : ""
-            }`}
-            aria-pressed={uiTheme === "light"}
-            suppressHydrationWarning
+    <section className="crt-ui mx-auto flex w-full min-w-0 max-w-2xl flex-col items-stretch gap-4 sm:gap-5">
+      <header className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 items-center justify-start">
+          {showPlainHeaderTitle ? (
+            <h1 className="truncate text-xs font-semibold uppercase tracking-wide text-zinc-700 dark:text-zinc-200">
+              Blind Protocol
+            </h1>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {roomState ? (
+            <RoomAiGmMenu
+              settings={hostLlmSettings ?? hostLlmToPublicSettings(undefined)}
+              formNonce={hostLlmFormNonce}
+              saving={hostLlmSaving}
+              onSave={handleSaveHostLlm}
+              canEdit={canEditRoomLlm}
+              readOnlyNotice={roomLlmReadOnlyNotice}
+            />
+          ) : null}
+          <div
+            className="crt-mode-toggle inline-flex shrink-0 items-center rounded-md border"
+            role="group"
+            aria-label="Choose light or dark theme"
           >
-            Light
-          </button>
-          <button
-            type="button"
-            onClick={() => handleThemeChange("dark")}
-            className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
-              uiTheme === "dark" ? "is-active" : ""
-            }`}
-            aria-pressed={uiTheme === "dark"}
-            suppressHydrationWarning
-          >
-            Dark
-          </button>
+            <button
+              type="button"
+              onClick={() => handleThemeChange("light")}
+              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
+                uiTheme === "light" ? "is-active" : ""
+              }`}
+              aria-pressed={uiTheme === "light"}
+              suppressHydrationWarning
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              onClick={() => handleThemeChange("dark")}
+              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
+                uiTheme === "dark" ? "is-active" : ""
+              }`}
+              aria-pressed={uiTheme === "dark"}
+              suppressHydrationWarning
+            >
+              Dark
+            </button>
+          </div>
         </div>
       </header>
       {supabaseConfigWarning ? (
@@ -730,9 +778,9 @@ function GameClient() {
           {supabaseConfigWarning}
         </p>
       ) : null}
-      {showGameTitle ? (
+      {showAsciiTitle ? (
         <div className="crt-title-ascii-bleed self-stretch w-full min-w-0">
-          <div className="relative left-1/2 box-border w-svw max-w-svw shrink-0 -translate-x-1/2 overflow-hidden px-3 sm:px-6">
+          <div className="relative left-1/2 box-border w-svw max-w-svw shrink-0 -translate-x-1/2 overflow-hidden px-4 sm:px-5">
             <BlindProtocolAsciiTitle />
           </div>
         </div>
@@ -744,59 +792,64 @@ function GameClient() {
         </p>
       )}
 
-      {!roomState ? (
-        <GameHomeView
-          name={name}
-          setName={setName}
-          joinCodeInput={joinCodeInput}
-          setJoinCodeInput={setJoinCodeInput}
-          homeLocked={homeLocked}
-          homeBusy={homeBusy}
-          lobbyPrimaryBtnClass={lobbyPrimaryBtnClass}
-          onCreateRoom={handleCreateRoom}
-          onJoinRoom={handleJoinRoom}
-        />
-      ) : roomState.phase === "lobby" ? (
-        <GameLobbyView
-          roomState={roomState}
-          displayJoinCode={displayJoinCode}
-          myPlayerId={myPlayerId}
-          themeFieldLabelId={themeFieldLabelId}
-          lobbySelectClass={lobbySelectClass}
-          lobbyStartBtnClass={lobbyStartBtnClass}
-          isStarting={isStarting}
-          lobbyThemeSaving={lobbyThemeSaving}
-          hostLlmSaving={hostLlmSaving}
-          onStartGame={handleStartGame}
-          onSetLobbyTheme={handleSetLobbyTheme}
-          onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}
-        />
-      ) : (
-        <GameSessionView
-          roomState={roomState}
-          myPlayerId={myPlayerId}
-          voteSelectionId={voteSelectionId}
-          setVoteSelectionId={setVoteSelectionId}
-          voteSubmitting={voteSubmitting}
-          onConfirmVote={() => void confirmVote()}
-          actionInput={actionInput}
-          setActionInput={setActionInput}
-          actionSubmitting={actionSubmitting}
-          onSendAction={() => void handleAction()}
-          flushTypingEmit={flushTypingEmit}
-          scheduleTypingStop={scheduleTypingStop}
-          typingIdleRef={typingIdleRef}
-          rolePanelOpen={rolePanelOpen}
-          setRolePanelOpen={setRolePanelOpen}
-          rolePanelContentId={rolePanelContentId}
-          logScrollContainerRef={logScrollContainerRef}
-          remoteTypingNames={remoteTypingNames}
-          beatPending={beatPending}
-          gmThinking={gmThinking}
-          onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}
-        />
-
-      )}
+      <GameContentColumn>
+        {!roomState ? (
+          <GameHomeView
+            name={name}
+            setName={setName}
+            joinCodeInput={joinCodeInput}
+            setJoinCodeInput={setJoinCodeInput}
+            homeLocked={homeLocked}
+            homeBusy={homeBusy}
+            lobbyPrimaryBtnClass={lobbyPrimaryBtnClass}
+            onCreateRoom={handleCreateRoom}
+            onJoinRoom={handleJoinRoom}
+          />
+        ) : roomState.phase === "lobby" ? (
+          <GameLobbyView
+            roomState={roomState}
+            displayJoinCode={displayJoinCode}
+            myPlayerId={myPlayerId}
+            themeFieldLabelId={themeFieldLabelId}
+            lobbySelectClass={lobbySelectClass}
+            lobbyStartBtnClass={lobbyStartBtnClass}
+            isStarting={isStarting}
+            lobbyThemeSaving={lobbyThemeSaving}
+            hostLlmSaving={hostLlmSaving}
+            roomAiReady={roomAiReady}
+            isRoomHost={isRoomHost}
+            renameSaving={lobbyRenameSaving}
+            onStartGame={handleStartGame}
+            onSetLobbyTheme={handleSetLobbyTheme}
+            onRenameDisplayName={handleRenameLobbyDisplayName}
+            onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}
+          />
+        ) : (
+          <GameSessionView
+            roomState={roomState}
+            myPlayerId={myPlayerId}
+            voteSelectionId={voteSelectionId}
+            setVoteSelectionId={setVoteSelectionId}
+            voteSubmitting={voteSubmitting}
+            onConfirmVote={() => void confirmVote()}
+            actionInput={actionInput}
+            setActionInput={setActionInput}
+            actionSubmitting={actionSubmitting}
+            onSendAction={() => void handleAction()}
+            flushTypingEmit={flushTypingEmit}
+            scheduleTypingStop={scheduleTypingStop}
+            typingIdleRef={typingIdleRef}
+            rolePanelOpen={rolePanelOpen}
+            setRolePanelOpen={setRolePanelOpen}
+            rolePanelContentId={rolePanelContentId}
+            logScrollContainerRef={logScrollContainerRef}
+            remoteTypingNames={remoteTypingNames}
+            beatPending={beatPending}
+            gmThinking={gmThinking}
+            onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}
+          />
+        )}
+      </GameContentColumn>
       <EndGameConfirmDialog
         open={endGameConfirmOpen}
         confirmLoading={resetSubmitting}

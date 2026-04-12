@@ -1,45 +1,15 @@
 /** Server-side LLM: Ollama (/api/generate) or OpenAI-compatible Chat Completions. */
 
-import { assertOllamaHostAllowedForFetch } from "./host-llm-config";
+import {
+  assertOllamaHostAllowedForFetch,
+  isRoomLlmConfigured,
+} from "./host-llm-config";
 import type { HostLlmRoomConfig } from "./types";
 
 export type LlmProvider = "ollama" | "openai";
 
 function stripTrailingSlashes(url: string): string {
   return url.replace(/\/+$/, "");
-}
-
-export function getLlmProvider(): LlmProvider {
-  const p = process.env.LLM_PROVIDER?.toLowerCase().trim();
-  if (p === "openai") return "openai";
-  return "ollama";
-}
-
-function envOllamaBaseUrl(): string {
-  const raw = process.env.OLLAMA_HOST?.trim() || "http://127.0.0.1:11434";
-  return stripTrailingSlashes(raw);
-}
-
-function envOllamaModel(): string {
-  return (
-    process.env.OLLAMA_MODEL?.trim() ||
-    process.env.LLM_MODEL?.trim() ||
-    "qwen2.5:14b-instruct"
-  );
-}
-
-function envOpenAiBaseUrl(): string {
-  const raw =
-    process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1";
-  return stripTrailingSlashes(raw);
-}
-
-function envOpenAiModel(): string {
-  return (
-    process.env.OPENAI_MODEL?.trim() ||
-    process.env.LLM_MODEL?.trim() ||
-    "gpt-4o-mini"
-  );
 }
 
 type ResolvedLlmCall = {
@@ -67,45 +37,50 @@ function normalizeOllamaInputHost(raw: string): string {
 }
 
 function resolveLlmCall(hostLlm?: HostLlmRoomConfig | null): ResolvedLlmCall {
-  if (!hostLlm?.useCustomLlm) {
+  if (!isRoomLlmConfigured(hostLlm)) {
+    throw new Error(
+      "Room LLM is not configured. The host must save Ollama or OpenAI credentials in the lobby (AI · GM)."
+    );
+  }
+
+  const h = hostLlm!;
+  const provider: LlmProvider =
+    h.provider === "openai" ? "openai" : "ollama";
+
+  if (provider === "openai") {
+    const openAiBaseRaw = h.openaiBaseUrl.trim();
+    const openAiBase = stripTrailingSlashes(
+      openAiBaseRaw.includes("://")
+        ? openAiBaseRaw
+        : `https://${openAiBaseRaw}`
+    );
     return {
-      provider: getLlmProvider(),
-      ollamaBase: envOllamaBaseUrl(),
-      ollamaModel: envOllamaModel(),
-      openAiBase: envOpenAiBaseUrl(),
-      openAiModel: envOpenAiModel(),
-      openAiKey: process.env.OPENAI_API_KEY?.trim() ?? "",
+      provider: "openai",
+      ollamaBase: "",
+      ollamaModel: "",
+      openAiBase,
+      openAiModel: h.openaiModel.trim(),
+      openAiKey: h.openaiApiKey!.trim(),
       userSuppliedOllamaHost: false,
     };
   }
 
-  const provider: LlmProvider =
-    hostLlm.provider === "openai" ? "openai" : "ollama";
-  const customOllama = normalizeOllamaInputHost(hostLlm.ollamaHost ?? "");
-  const ollamaBase = customOllama || envOllamaBaseUrl();
-  const ollamaModel =
-    hostLlm.ollamaModel?.trim() || envOllamaModel();
-  const openAiBaseRaw = hostLlm.openaiBaseUrl?.trim();
-  const openAiBase = openAiBaseRaw
-    ? stripTrailingSlashes(
-        openAiBaseRaw.includes("://")
-          ? openAiBaseRaw
-          : `https://${openAiBaseRaw}`
-      )
-    : envOpenAiBaseUrl();
-  const openAiModel = hostLlm.openaiModel?.trim() || envOpenAiModel();
-  const openAiKey =
-    hostLlm.openaiApiKey?.trim() ||
-    process.env.OPENAI_API_KEY?.trim() ||
-    "";
+  const rawHost = h.ollamaHost.trim();
+  const customOllama = normalizeOllamaInputHost(rawHost);
+  const ollamaBase =
+    customOllama ||
+    stripTrailingSlashes(
+      rawHost.includes("://") ? rawHost : `http://${rawHost}`
+    );
+  const ollamaModel = h.ollamaModel.trim();
 
   return {
-    provider,
+    provider: "ollama",
     ollamaBase,
     ollamaModel,
-    openAiBase,
-    openAiModel,
-    openAiKey,
+    openAiBase: "",
+    openAiModel: "",
+    openAiKey: "",
     userSuppliedOllamaHost: Boolean(customOllama),
   };
 }

@@ -1,7 +1,9 @@
 "use client";
 
+import { useId, useState } from "react";
 import { BusyButton } from "@/app/components/ui/BusyButton";
 import { LobbyThemePicker } from "@/app/components/game/lobby-theme-picker";
+import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/game-limits";
 import type { PublicRoomState as RoomState } from "@/lib/public-room-state";
 import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
 
@@ -15,8 +17,14 @@ export type GameLobbyViewProps = {
   isStarting: boolean;
   lobbyThemeSaving: boolean;
   hostLlmSaving: boolean;
+  /** True when room snapshot has complete per-room LLM credentials */
+  roomAiReady: boolean;
+  isRoomHost: boolean;
+  renameSaving: boolean;
   onStartGame: () => void;
   onSetLobbyTheme: (theme: string) => Promise<void>;
+  /** Resolves true when the server accepted the new name. */
+  onRenameDisplayName: (name: string) => Promise<boolean>;
   onOpenEndGameConfirm: () => void;
 };
 
@@ -30,51 +38,46 @@ export function GameLobbyView({
   isStarting,
   lobbyThemeSaving,
   hostLlmSaving,
+  roomAiReady,
+  isRoomHost,
+  renameSaving,
   onStartGame,
   onSetLobbyTheme,
+  onRenameDisplayName,
   onOpenEndGameConfirm,
 }: GameLobbyViewProps) {
+  const renameDialogId = useId();
+  const renameTitleId = useId();
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [draftName, setDraftName] = useState("");
+
+  const myName =
+    myPlayerId && roomState.players.find((p) => p.id === myPlayerId)?.name;
+
+  const openRenameModal = () => {
+    if (!myPlayerId) return;
+    setDraftName(myName ?? "");
+    setRenameOpen(true);
+  };
+
+  const closeRenameModal = () => {
+    setRenameOpen(false);
+    setDraftName("");
+  };
+
   return (
-    <div className="flex flex-col gap-6 w-full max-w-md items-center text-center">
+    <div className="flex w-full flex-col items-center gap-5 text-center sm:gap-6">
       {displayJoinCode ? (
-        <div className="crt-card w-full rounded-xl border-2 px-4 py-3 text-left">
+        <div className="w-full rounded-none border-x-0 border-y-2 border-violet-300/90 bg-transparent px-4 py-5 text-center dark:border-violet-700/55">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
             Room code
           </p>
-          <p className="font-mono text-2xl font-bold tracking-[0.2em] text-zinc-900 dark:text-zinc-100">
+          <p className="mt-2 font-mono text-4xl font-bold tracking-[0.35em] text-zinc-900 sm:text-5xl sm:tracking-[0.4em] dark:text-zinc-100">
             {displayJoinCode}
-          </p>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Others can open this app and enter the code, or use{" "}
-            <span className="font-mono text-[11px]">
-              ?join={displayJoinCode}
-            </span>{" "}
-            in the URL.
           </p>
         </div>
       ) : null}
-      <p className="w-full text-left text-xs font-semibold tracking-wide">
-        Players:
-      </p>
-      <div className="flex flex-wrap justify-center gap-3 w-full">
-        {roomState.players.length === 0 ? (
-          <div className="crt-card-muted rounded-xl border border-dashed px-5 py-4 text-sm">
-            No players yet
-          </div>
-        ) : (
-          roomState.players.map((p) => (
-            <div
-              key={p.id}
-              className="crt-card rounded-xl border px-4 py-3 min-w-26"
-            >
-              <p className="text-sm font-semibold">
-                {p.name}
-                {p.id === myPlayerId ? " (YOU)" : ""}
-              </p>
-            </div>
-          ))
-        )}
-      </div>
+
       {SCENARIO_THEME_LABELS.length === 0 ? (
         <p className="text-sm text-rose-600 dark:text-rose-400" role="status">
           No themes in scenarios — add{" "}
@@ -83,7 +86,7 @@ export function GameLobbyView({
           </code>
         </p>
       ) : (
-        <div className="flex flex-col gap-2 text-zinc-800 dark:text-zinc-200 w-full text-left">
+        <div className="flex w-full flex-col gap-2 text-left text-zinc-800 dark:text-zinc-200">
           <span className="text-sm font-medium" id={themeFieldLabelId}>
             Theme
           </span>
@@ -104,6 +107,52 @@ export function GameLobbyView({
           />
         </div>
       )}
+
+      <p className="w-full text-left text-xs font-semibold tracking-wide">
+        Players:
+      </p>
+      <div className="flex w-full flex-wrap justify-center gap-3">
+        {roomState.players.length === 0 ? (
+          <div className="crt-card-muted rounded-xl border border-dashed px-5 py-4 text-sm">
+            No players yet
+          </div>
+        ) : (
+          roomState.players.map((p) => {
+            const isMe = p.id === myPlayerId;
+            if (isMe) {
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={openRenameModal}
+                  className="crt-card min-w-26 rounded-xl border px-4 py-3 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--crt-panel)_70%,var(--crt-bg)_30%)]"
+                  aria-label={`Change your display name (${p.name})`}
+                  aria-haspopup="dialog"
+                  aria-expanded={renameOpen}
+                  aria-controls={renameDialogId}
+                >
+                  <p className="text-sm font-semibold">
+                    {p.name}
+                    <span className="text-zinc-500 dark:text-zinc-400">
+                      {" "}
+                      (YOU)
+                    </span>
+                  </p>
+                </button>
+              );
+            }
+            return (
+              <div
+                key={p.id}
+                className="crt-card min-w-26 rounded-xl border px-4 py-3"
+              >
+                <p className="text-sm font-semibold">{p.name}</p>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       <BusyButton
         type="button"
         onClick={() => void onStartGame()}
@@ -112,6 +161,7 @@ export function GameLobbyView({
           isStarting ||
           lobbyThemeSaving ||
           hostLlmSaving ||
+          !roomAiReady ||
           SCENARIO_THEME_LABELS.length === 0 ||
           !SCENARIO_THEME_LABELS.includes(roomState.lobbyTheme?.trim() ?? "")
         }
@@ -119,9 +169,20 @@ export function GameLobbyView({
         loadingLabel="Starting…"
         className={lobbyStartBtnClass}
       >
-        Start game
+        {(() => {
+          const themeOk =
+            SCENARIO_THEME_LABELS.length > 0 &&
+            SCENARIO_THEME_LABELS.includes(roomState.lobbyTheme?.trim() ?? "");
+          if (!roomAiReady) {
+            return isRoomHost ? "Set up AI" : "Waiting for host AI";
+          }
+          if (!themeOk) return "Pick a theme";
+          if (roomState.players.length < 2) return "Need more players";
+          return "Start game";
+        })()}
       </BusyButton>
-      <div className="flex w-full justify-center border-t border-violet-200/50 pt-4 dark:border-violet-800/30">
+
+      <div className="flex w-full justify-end border-t border-violet-200/50 pt-4 dark:border-violet-800/30">
         <button
           type="button"
           onClick={onOpenEndGameConfirm}
@@ -130,6 +191,70 @@ export function GameLobbyView({
           End game
         </button>
       </div>
+
+      {renameOpen ? (
+        <div
+          className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 px-4 py-4 sm:px-5 sm:py-5"
+          role="presentation"
+          onClick={() => closeRenameModal()}
+        >
+          <div
+            id={renameDialogId}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={renameTitleId}
+            className="crt-card max-w-sm w-full rounded-2xl border-2 p-5 shadow-none"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") closeRenameModal();
+            }}
+          >
+            <h2
+              id={renameTitleId}
+              className="text-base font-semibold uppercase tracking-wide"
+            >
+              Change display name
+            </h2>
+            <label className="mt-4 flex flex-col gap-1 text-left text-sm">
+              <span className="text-zinc-600 dark:text-zinc-400">Name</span>
+              <input
+                type="text"
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                maxLength={MAX_DISPLAY_NAME_LENGTH}
+                className="crt-action-input w-full rounded-lg border-2 border-violet-200 py-2 pl-3 text-zinc-900 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-zinc-100"
+                autoComplete="off"
+                autoFocus
+              />
+            </label>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-medium"
+                onClick={() => closeRenameModal()}
+                disabled={renameSaving}
+              >
+                Cancel
+              </button>
+              <BusyButton
+                type="button"
+                className="crt-btn-cta rounded-lg px-4 py-2 text-sm font-semibold"
+                disabled={!draftName.trim()}
+                loading={renameSaving}
+                loadingLabel="Saving…"
+                onClick={() =>
+                  void (async () => {
+                    const ok = await onRenameDisplayName(draftName.trim());
+                    if (ok) closeRenameModal();
+                  })()
+                }
+              >
+                Save
+              </BusyButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

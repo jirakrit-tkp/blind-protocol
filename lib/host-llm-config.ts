@@ -35,6 +35,33 @@ export function hostLlmToPublicSettings(
   };
 }
 
+/** True when this room snapshot has a complete LLM setup (no server env fallback). */
+export function isRoomLlmConfigured(
+  hostLlm: HostLlmRoomConfig | undefined | null
+): boolean {
+  if (!hostLlm?.useCustomLlm) return false;
+  if (hostLlm.provider === "openai") {
+    const base = hostLlm.openaiBaseUrl?.trim() ?? "";
+    const model = hostLlm.openaiModel?.trim() ?? "";
+    const key = hostLlm.openaiApiKey?.trim() ?? "";
+    return Boolean(base && model && key);
+  }
+  const host = hostLlm.ollamaHost?.trim() ?? "";
+  const model = hostLlm.ollamaModel?.trim() ?? "";
+  return Boolean(host && model);
+}
+
+/** Client-side mirror of {@link isRoomLlmConfigured} using redacted settings from GET /state. */
+export function isRoomLlmReadyPublic(s: HostLlmSettingsPublic): boolean {
+  if (!s.useCustomLlm) return false;
+  if (s.provider === "openai") {
+    return Boolean(
+      s.openaiBaseUrl.trim() && s.openaiModel.trim() && s.hasOpenAiKey
+    );
+  }
+  return Boolean(s.ollamaHost.trim() && s.ollamaModel.trim());
+}
+
 function allowPrivateOllamaHosts(): boolean {
   return (
     process.env.NODE_ENV !== "production" ||
@@ -144,7 +171,13 @@ export function mergeHostLlmUpdate(
   const openaiBaseUrl = trimLen(body.openaiBaseUrl ?? "", MAX_URL);
   const openaiModel = trimLen(body.openaiModel ?? "", MAX_MODEL);
 
-  if (useCustomLlm && provider === "ollama" && ollamaHost) {
+  if (useCustomLlm && provider === "ollama") {
+    if (!ollamaHost) {
+      return { ok: false, error: "Ollama host is required" };
+    }
+    if (!ollamaModel) {
+      return { ok: false, error: "Ollama model is required" };
+    }
     try {
       assertOllamaHostAllowedForFetch(
         ollamaHost.includes("://") ? ollamaHost : `http://${ollamaHost}`
@@ -155,7 +188,13 @@ export function mergeHostLlmUpdate(
     }
   }
 
-  if (useCustomLlm && provider === "openai" && openaiBaseUrl) {
+  if (useCustomLlm && provider === "openai") {
+    if (!openaiBaseUrl) {
+      return { ok: false, error: "OpenAI base URL is required" };
+    }
+    if (!openaiModel) {
+      return { ok: false, error: "OpenAI model is required" };
+    }
     try {
       const u = new URL(openaiBaseUrl);
       if (u.protocol !== "http:" && u.protocol !== "https:") {
@@ -178,28 +217,29 @@ export function mergeHostLlmUpdate(
 
   if (useCustomLlm && provider === "openai") {
     const hasKey = Boolean(openaiApiKey?.trim());
-    const envKey = Boolean(process.env.OPENAI_API_KEY?.trim());
-    if (!hasKey && !envKey) {
+    if (!hasKey) {
       return {
         ok: false,
-        error:
-          "OpenAI provider needs an API key (enter one or set OPENAI_API_KEY on the server).",
+        error: "OpenAI-compatible API key is required for this room.",
       };
     }
   }
 
-  return {
-    ok: true,
-    config: {
-      useCustomLlm,
-      provider,
-      ollamaHost,
-      ollamaModel,
-      openaiBaseUrl,
-      openaiModel,
-      openaiApiKey,
-    },
+  const config: HostLlmRoomConfig = {
+    useCustomLlm,
+    provider,
+    ollamaHost,
+    ollamaModel,
+    openaiBaseUrl,
+    openaiModel,
+    openaiApiKey,
   };
+
+  if (useCustomLlm && !isRoomLlmConfigured(config)) {
+    return { ok: false, error: "LLM configuration is incomplete" };
+  }
+
+  return { ok: true, config };
 }
 
 export function coerceHostLlmFromSnapshot(
