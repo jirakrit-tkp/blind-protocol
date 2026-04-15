@@ -756,7 +756,7 @@ function GameClient() {
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {roomState ? (
+          {roomState && isRoomHost ? (
             <RoomAiGmMenu
               settings={hostLlmSettings ?? hostLlmToPublicSettings(undefined)}
               saving={hostLlmSaving}
