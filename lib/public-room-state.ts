@@ -10,6 +10,7 @@ export type PublicRoomState = {
   worldState: Record<string, string | number | boolean>;
   situation?: string;
   lobbyTheme: string;
+  lobbyMode: "imposter" | "mission";
   votes: Record<string, string>;
   voteOutcome?: Room["voteOutcome"];
   voteTieInfo?: Room["voteTieInfo"];
@@ -40,6 +41,7 @@ export function getPublicRoomState(
     worldState: room.worldState,
     situation: room.situation,
     lobbyTheme: room.lobbyTheme,
+    lobbyMode: room.lobbyMode,
     votes: { ...(room.votes ?? {}) },
     voteOutcome: room.voteOutcome,
     voteTieInfo: room.voteTieInfo

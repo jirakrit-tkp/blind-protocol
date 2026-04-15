@@ -50,6 +50,7 @@ export function normalizeRoom(raw: unknown, roomId: string): Room {
     phase: "lobby",
     worldState: {},
     lobbyTheme: defaultLobbyTheme(),
+    lobbyMode: "imposter",
     votes: {},
   };
   if (!raw || typeof raw !== "object") return base;
@@ -82,6 +83,9 @@ export function normalizeRoom(raw: unknown, roomId: string): Room {
     base.lobbyTheme = o.lobbyTheme;
   } else if (typeof o.lobbyTheme !== "string" || !o.lobbyTheme.trim()) {
     base.lobbyTheme = defaultLobbyTheme();
+  }
+  if (o.lobbyMode === "imposter" || o.lobbyMode === "mission") {
+    base.lobbyMode = o.lobbyMode;
   }
   if (o.votes && typeof o.votes === "object") {
     base.votes = { ...(o.votes as Record<string, string>) };
@@ -122,6 +126,20 @@ function pushMissionOutcomeAndEnterVoting(room: Room): void {
     narrative: line,
   };
   room.logs.push(outcomeLog);
+  if (room.lobbyMode === "mission") {
+    const missionSucceeded = isMissionWon(room.worldState);
+    room.voteTieInfo = undefined;
+    room.voteOutcome = {
+      accusedId: "",
+      imposterId: "",
+      crewWon: missionSucceeded,
+      missionSucceeded,
+      tally: [],
+    };
+    room.phase = "end";
+    room.votes = {};
+    return;
+  }
   room.phase = "voting";
   room.votes = {};
   room.voteTieInfo = undefined;
@@ -228,6 +246,7 @@ export function resetMainRoomToLobby(room: Room): Room {
   room.worldState = {};
   delete room.situation;
   room.lobbyTheme = defaultLobbyTheme();
+  room.lobbyMode = "imposter";
   room.votes = {};
   room.voteOutcome = undefined;
   room.voteTieInfo = undefined;
@@ -302,6 +321,23 @@ export function handleSetLobbyTheme(
   return { ok: true, room: r };
 }
 
+export function handleSetLobbyMode(
+  room: Room,
+  playerId: string,
+  mode: string | undefined
+): { ok: true; room: Room } | { ok: false; error: string } {
+  const r = getRoomForPlayer(room, playerId);
+  if (!r || r.phase !== "lobby") {
+    return { ok: false, error: "Not in lobby" };
+  }
+  const m = mode?.trim() ?? "";
+  if (m !== "imposter" && m !== "mission") {
+    return { ok: false, error: "Pick a valid mode" };
+  }
+  r.lobbyMode = m;
+  return { ok: true, room: r };
+}
+
 export function handleSetHostLlm(
   room: Room,
   playerId: string,
@@ -326,7 +362,8 @@ export function handleSetHostLlm(
 export function handleStartGame(
   room: Room,
   playerId: string,
-  themeFromPayload: string | undefined
+  themeFromPayload: string | undefined,
+  modeFromPayload: string | undefined
 ): { ok: true; room: Room } | { ok: false; error: string } {
   const r = getRoomForPlayer(room, playerId);
   if (!r) return { ok: false, error: "Not in a room" };
@@ -344,6 +381,14 @@ export function handleStartGame(
   if (!theme || !allowedThemes.has(theme)) {
     return { ok: false, error: "Pick a theme from the list" };
   }
+  const payloadMode = modeFromPayload?.trim() ?? "";
+  const mode =
+    payloadMode === "imposter" || payloadMode === "mission"
+      ? payloadMode
+      : r.lobbyMode;
+  if (mode !== "imposter" && mode !== "mission") {
+    return { ok: false, error: "Pick a valid mode" };
+  }
 
   if (!isRoomLlmConfigured(r.hostLlm)) {
     return {
@@ -360,10 +405,17 @@ export function handleStartGame(
 
   const { situation, worldState } = fromPool;
 
-  const imposterIndex = Math.floor(Math.random() * r.players.length);
-  r.players.forEach((p, i) => {
-    p.role = i === imposterIndex ? "imposter" : "normal";
-  });
+  if (mode === "imposter") {
+    const imposterIndex = Math.floor(Math.random() * r.players.length);
+    r.players.forEach((p, i) => {
+      p.role = i === imposterIndex ? "imposter" : "normal";
+    });
+  } else {
+    r.players.forEach((p) => {
+      p.role = "normal";
+    });
+  }
+  r.lobbyMode = mode;
   r.phase = "playing";
   r.currentTurn = 0;
   r.roundIndex = 0;

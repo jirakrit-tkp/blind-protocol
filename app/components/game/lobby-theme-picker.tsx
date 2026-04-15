@@ -15,6 +15,7 @@ export type LobbyThemePickerProps = {
   value: string;
   onSelect: (theme: string) => void;
   buttonClassName: string;
+  uppercaseLabels?: boolean;
   /** True while the parent is saving the theme to the server. */
   isApplying?: boolean;
   "aria-labelledby"?: string;
@@ -25,6 +26,7 @@ export function LobbyThemePicker({
   value,
   onSelect,
   buttonClassName,
+  uppercaseLabels = false,
   isApplying = false,
   "aria-labelledby": ariaLabelledBy,
 }: LobbyThemePickerProps) {
@@ -138,7 +140,11 @@ export function LobbyThemePicker({
         loading={isApplying}
         loadingLabel="Updating theme…"
       >
-        <span className="min-w-0 truncate">{value}</span>
+        <span
+          className={`min-w-0 truncate ${uppercaseLabels ? "uppercase tracking-wide" : ""}`}
+        >
+          {value}
+        </span>
         {chevron}
       </BusyButton>
       {open && !isApplying ? (
@@ -164,7 +170,11 @@ export function LobbyThemePicker({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pick(label)}
               >
-                <span className="min-w-0 truncate">{label}</span>
+                <span
+                  className={`min-w-0 truncate ${uppercaseLabels ? "uppercase tracking-wide" : ""}`}
+                >
+                  {label}
+                </span>
                 {selected ? (
                   <svg
                     className="size-4 shrink-0"

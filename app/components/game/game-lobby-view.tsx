@@ -7,6 +7,11 @@ import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/game-limits";
 import type { PublicRoomState as RoomState } from "@/lib/public-room-state";
 import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
 
+const LOBBY_MODE_OPTIONS = [
+  { label: "Imposter", value: "imposter" },
+  { label: "Mission", value: "mission" },
+] as const;
+
 export type GameLobbyViewProps = {
   roomState: RoomState;
   displayJoinCode: string | undefined;
@@ -16,6 +21,7 @@ export type GameLobbyViewProps = {
   lobbyStartBtnClass: string;
   isStarting: boolean;
   lobbyThemeSaving: boolean;
+  lobbyModeSaving: boolean;
   hostLlmSaving: boolean;
   /** True when room snapshot has complete per-room LLM credentials */
   roomAiReady: boolean;
@@ -23,6 +29,7 @@ export type GameLobbyViewProps = {
   renameSaving: boolean;
   onStartGame: () => void;
   onSetLobbyTheme: (theme: string) => Promise<void>;
+  onSetLobbyMode: (mode: "imposter" | "mission") => Promise<void>;
   /** Resolves true when the server accepted the new name. */
   onRenameDisplayName: (name: string) => Promise<boolean>;
   onOpenEndGameConfirm: () => void;
@@ -37,17 +44,20 @@ export function GameLobbyView({
   lobbyStartBtnClass,
   isStarting,
   lobbyThemeSaving,
+  lobbyModeSaving,
   hostLlmSaving,
   roomAiReady,
   isRoomHost,
   renameSaving,
   onStartGame,
   onSetLobbyTheme,
+  onSetLobbyMode,
   onRenameDisplayName,
   onOpenEndGameConfirm,
 }: GameLobbyViewProps) {
   const renameDialogId = useId();
   const renameTitleId = useId();
+  const modeFieldLabelId = useId();
   const [renameOpen, setRenameOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
 
@@ -86,25 +96,49 @@ export function GameLobbyView({
           </code>
         </p>
       ) : (
-        <div className="flex w-full flex-col gap-2 text-left text-zinc-800 dark:text-zinc-200">
-          <span className="text-sm font-medium" id={themeFieldLabelId}>
-            Theme
-          </span>
-          <LobbyThemePicker
-            labels={SCENARIO_THEME_LABELS}
-            value={
-              roomState.lobbyTheme &&
-              SCENARIO_THEME_LABELS.includes(roomState.lobbyTheme)
-                ? roomState.lobbyTheme
-                : SCENARIO_THEME_LABELS[0] ?? ""
-            }
-            onSelect={(theme) => {
-              void onSetLobbyTheme(theme);
-            }}
-            isApplying={lobbyThemeSaving}
-            buttonClassName={lobbySelectClass}
-            aria-labelledby={themeFieldLabelId}
-          />
+        <div className="grid w-full grid-cols-1 gap-4 text-left text-zinc-800 sm:grid-cols-2 dark:text-zinc-200">
+          <div className="flex min-w-0 flex-col gap-2">
+            <span className="text-sm font-medium" id={themeFieldLabelId}>
+              Theme
+            </span>
+            <LobbyThemePicker
+              labels={SCENARIO_THEME_LABELS}
+              value={
+                roomState.lobbyTheme &&
+                SCENARIO_THEME_LABELS.includes(roomState.lobbyTheme)
+                  ? roomState.lobbyTheme
+                  : SCENARIO_THEME_LABELS[0] ?? ""
+              }
+              onSelect={(theme) => {
+                void onSetLobbyTheme(theme);
+              }}
+              isApplying={lobbyThemeSaving}
+              buttonClassName={lobbySelectClass}
+              aria-labelledby={themeFieldLabelId}
+            />
+          </div>
+          <div className="flex min-w-0 flex-col gap-2">
+            <span className="text-sm font-medium" id={modeFieldLabelId}>
+              Mode
+            </span>
+            <LobbyThemePicker
+              labels={LOBBY_MODE_OPTIONS.map((o) => o.label)}
+              value={
+                LOBBY_MODE_OPTIONS.find((o) => o.value === roomState.lobbyMode)
+                  ?.label ?? "Imposter"
+              }
+              onSelect={(label) => {
+                const mode =
+                  LOBBY_MODE_OPTIONS.find((o) => o.label === label)?.value ??
+                  "imposter";
+                void onSetLobbyMode(mode);
+              }}
+              isApplying={lobbyModeSaving}
+              uppercaseLabels
+              buttonClassName={lobbySelectClass}
+              aria-labelledby={modeFieldLabelId}
+            />
+          </div>
         </div>
       )}
 
@@ -160,6 +194,7 @@ export function GameLobbyView({
           roomState.players.length < 2 ||
           isStarting ||
           lobbyThemeSaving ||
+          lobbyModeSaving ||
           hostLlmSaving ||
           !roomAiReady ||
           SCENARIO_THEME_LABELS.length === 0 ||

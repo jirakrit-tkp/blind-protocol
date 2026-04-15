@@ -97,6 +97,7 @@ function GameClient() {
   const [voteSubmitting, setVoteSubmitting] = useState(false);
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [lobbyThemeSaving, setLobbyThemeSaving] = useState(false);
+  const [lobbyModeSaving, setLobbyModeSaving] = useState(false);
   const [hostLlmSettings, setHostLlmSettings] =
     useState<HostLlmSettingsPublic | null>(null);
   const [hostLlmSaving, setHostLlmSaving] = useState(false);
@@ -163,6 +164,7 @@ function GameClient() {
       setVoteSubmitting(false);
       setActionSubmitting(false);
       setLobbyThemeSaving(false);
+      setLobbyModeSaving(false);
       setLobbyRenameSaving(false);
       setHostLlmSettings(null);
       setHostLlmSaving(false);
@@ -580,6 +582,27 @@ function GameClient() {
     }
   };
 
+  const handleSetLobbyMode = async (mode: "imposter" | "mission") => {
+    setError("");
+    setLobbyModeSaving(true);
+    try {
+      const res = await fetch("/api/game/set-lobby-mode", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Could not set mode");
+        return;
+      }
+      await pullGameState();
+    } finally {
+      setLobbyModeSaving(false);
+    }
+  };
+
   const handleRenameLobbyDisplayName = async (
     displayName: string
   ): Promise<boolean> => {
@@ -620,7 +643,10 @@ function GameClient() {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ theme: themeToUse }),
+      body: JSON.stringify({
+        theme: themeToUse,
+        mode: roomState.lobbyMode ?? "imposter",
+      }),
     });
     const data = (await res.json()) as { error?: string };
     if (!res.ok) {
@@ -815,12 +841,14 @@ function GameClient() {
             lobbyStartBtnClass={lobbyStartBtnClass}
             isStarting={isStarting}
             lobbyThemeSaving={lobbyThemeSaving}
+            lobbyModeSaving={lobbyModeSaving}
             hostLlmSaving={hostLlmSaving}
             roomAiReady={roomAiReady}
             isRoomHost={isRoomHost}
             renameSaving={lobbyRenameSaving}
             onStartGame={handleStartGame}
             onSetLobbyTheme={handleSetLobbyTheme}
+            onSetLobbyMode={handleSetLobbyMode}
             onRenameDisplayName={handleRenameLobbyDisplayName}
             onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}
           />

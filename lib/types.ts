@@ -38,6 +38,8 @@ export type Room = {
   situation?: string;
   /** Selected scenario theme in lobby; broadcast to all players in real time */
   lobbyTheme: string;
+  /** Lobby mode: with Imposter (default) or mission-only. */
+  lobbyMode: "imposter" | "mission";
   /** Server-only in practice: excluded from `getPublicRoomState`. */
   hostLlm?: HostLlmRoomConfig;
   /** During `voting`: voter socket id → accused player id (one vote per voter). */

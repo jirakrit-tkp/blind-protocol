@@ -42,6 +42,7 @@ export function emptyRoomSnapshot(roomId: string): Room {
     phase: "lobby",
     worldState: {},
     lobbyTheme: defaultLobbyTheme(),
+    lobbyMode: "imposter",
     votes: {},
   };
 }

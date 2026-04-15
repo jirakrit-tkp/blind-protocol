@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { mutateGameRoom } from "@/lib/game-storage";
-import { handleStartGame } from "@/lib/main-room-engine";
+import { handleSetLobbyMode } from "@/lib/main-room-engine";
 import { isSupabaseConfigured } from "@/lib/supabase/service";
 import { PLAYER_COOKIE, ROOM_COOKIE } from "@/lib/game-api-constants";
 
@@ -19,9 +19,9 @@ export async function POST(req: Request) {
     if (!roomId || !playerId) {
       return NextResponse.json({ error: "Not in a room" }, { status: 401 });
     }
-    const body = (await req.json()) as { theme?: string; mode?: string };
+    const body = (await req.json()) as { mode?: string };
     const out = await mutateGameRoom(roomId, async (room) => {
-      const r = handleStartGame(room, playerId, body.theme, body.mode);
+      const r = handleSetLobbyMode(room, playerId, body.mode);
       if (!r.ok) return { ok: false, error: r.error };
       return { ok: true, room: r.room };
     });
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error("POST /api/game/start", e);
+    console.error("POST /api/game/set-lobby-mode", e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
