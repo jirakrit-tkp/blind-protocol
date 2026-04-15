@@ -2,6 +2,8 @@ import type { HostLlmRoomConfig, Room } from "./types";
 
 /** Safe subset returned to the room host in the lobby (no API keys). */
 export type HostLlmSettingsPublic = {
+  /** True when room has explicitly saved host LLM config. */
+  hasRoomConfig: boolean;
   mode: "preset" | "custom";
   useCustomLlm: boolean;
   provider: "ollama" | "openai" | "gemini" | "custom";
@@ -167,6 +169,7 @@ export function hostLlmToPublicSettings(
   const mode = h?.mode ?? (h?.useCustomLlm ? "custom" : "preset");
   const presetReady = Boolean(resolveEffectiveLlmConfig(undefined));
   return {
+    hasRoomConfig: Boolean(h),
     mode,
     useCustomLlm: Boolean(h?.useCustomLlm),
     provider:
@@ -211,12 +214,14 @@ export function hostLlmToPublicSettings(
 export function isRoomLlmConfigured(
   hostLlm: HostLlmRoomConfig | undefined | null
 ): boolean {
+  // No room-level config saved yet -> treat as unconfigured.
+  if (!hostLlm) return false;
   return Boolean(resolveEffectiveLlmConfig(hostLlm));
 }
 
 /** Client-side mirror of {@link isRoomLlmConfigured} using redacted settings from GET /state. */
 export function isRoomLlmReadyPublic(s: HostLlmSettingsPublic): boolean {
-  if (s.mode === "preset") return s.presetReady;
+  if (s.mode === "preset") return s.hasRoomConfig && s.presetReady;
   if (!s.useCustomLlm) return false;
   if (s.provider === "custom") {
     return Boolean(
@@ -305,8 +310,14 @@ function trimLen(s: string, max: number): string {
 }
 
 export type SetHostLlmBody = {
+  /** Clear room-level AI config and fall back to unconfigured state. */
+  reset?: boolean;
+  /** Allow partial/incomplete custom config for immediate key removal flows. */
+  allowIncompleteSave?: boolean;
   mode?: "preset" | "custom";
   useCustomLlm?: boolean;
+  /** Required when switching/saving preset mode on protected deployments. */
+  presetPasscode?: string;
   provider?: "ollama" | "openai" | "gemini" | "custom";
   ollamaHost?: string;
   ollamaModel?: string;
@@ -496,7 +507,7 @@ export function mergeHostLlmUpdate(
     geminiApiKey = k ? trimLen(k, MAX_KEY) : undefined;
   }
 
-  if (useCustomLlm && provider === "openai") {
+  if (!body.allowIncompleteSave && useCustomLlm && provider === "openai") {
     const hasKey = Boolean(openaiApiKey?.trim());
     if (!hasKey) {
       return {
@@ -505,7 +516,7 @@ export function mergeHostLlmUpdate(
       };
     }
   }
-  if (useCustomLlm && provider === "gemini") {
+  if (!body.allowIncompleteSave && useCustomLlm && provider === "gemini") {
     const hasKey = Boolean(geminiApiKey?.trim());
     if (!hasKey) {
       return { ok: false, error: "Gemini API key is required for this room." };
@@ -535,7 +546,7 @@ export function mergeHostLlmUpdate(
     modelByAgent: sanitizeModelByAgent(body.modelByAgent ?? existing?.modelByAgent),
   };
 
-  if (useCustomLlm && !isRoomLlmConfigured(config)) {
+  if (!body.allowIncompleteSave && useCustomLlm && !isRoomLlmConfigured(config)) {
     return { ok: false, error: "LLM configuration is incomplete" };
   }
 

@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from "crypto";
 import type { Room, RoomLog } from "./types";
 import { JOIN_CODE_LENGTH } from "./game-api-constants";
 import { normalizeRoom, defaultLobbyTheme } from "./main-room-engine";
+import { encryptHostLlmSecretsForStorage } from "./host-llm-secrets";
 import { getServiceSupabase } from "./supabase/service";
 
 const JOIN_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -122,11 +123,18 @@ export async function saveGameRoomIfUnchanged(
   const now = new Date().toISOString();
   const nextRev = expectedRev + 1;
   room.id = roomId;
+  const snapshotRoom = cloneRoom(room);
+  snapshotRoom.id = roomId;
+  const encryptedHostLlm = encryptHostLlmSecretsForStorage(snapshotRoom.hostLlm);
+  const snapshotPayload = {
+    ...snapshotRoom,
+    hostLlm: encryptedHostLlm ?? null,
+  };
 
   const { data, error } = await sb
     .from("game_rooms")
     .update({
-      snapshot: room,
+      snapshot: snapshotPayload,
       rev: nextRev,
       updated_at: now,
     })
@@ -175,7 +183,7 @@ export async function createGameRoomWithHost(displayName: string): Promise<{
   const { error: insErr } = await sb.from("game_rooms").insert({
     id: roomId,
     join_code: joinCode,
-    snapshot: room,
+    snapshot: { ...room, hostLlm: null },
     rev: 0,
     created_at: now,
     updated_at: now,

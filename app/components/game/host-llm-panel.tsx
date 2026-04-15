@@ -2,10 +2,8 @@
 
 import {
   type FormEvent,
-  useCallback,
   useEffect,
   useId,
-  useRef,
   useState,
 } from "react";
 import { BusyButton } from "@/app/components/ui/BusyButton";
@@ -19,8 +17,8 @@ import {
 export type HostLlmPanelProps = {
   settings: HostLlmSettingsPublic;
   saving: boolean;
-  /** Resolves true when the server accepted the update. */
-  onSave: (body: SetHostLlmBody) => Promise<boolean>;
+  /** Resolves save result; error is shown inside this panel. */
+  onSave: (body: SetHostLlmBody) => Promise<{ ok: boolean; error?: string }>;
   /** When false, form is read-only (only the host can save in the lobby). */
   canEdit?: boolean;
   /** Optional message when read-only (e.g. game already started). */
@@ -33,6 +31,8 @@ type InputWithUseButtonProps = {
   placeholder: string;
   inputClass: string;
   type?: "text" | "password";
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 type TextareaWithUseButtonProps = {
@@ -49,10 +49,14 @@ function InputWithUseButton({
   placeholder,
   inputClass,
   type = "text",
+  actionLabel,
+  onAction,
 }: InputWithUseButtonProps) {
   const canUsePlaceholder = placeholder.trim().length > 0;
   const hasValue = value.trim().length > 0;
   const useValue = placeholder.replace(/\s*\([^)]*\)\s*$/u, "").trim();
+  const hasCustomAction = Boolean(actionLabel && onAction);
+  const showUseClearAction = canUsePlaceholder && !hasCustomAction;
   return (
     <div className="relative w-full">
       <input
@@ -61,9 +65,17 @@ function InputWithUseButton({
         onChange={(ev) => onChange(ev.target.value)}
         placeholder={placeholder}
         autoComplete="off"
-        className={`${inputClass} w-full ${canUsePlaceholder ? "pr-14" : ""}`}
+        className={`${inputClass} w-full ${showUseClearAction || hasCustomAction ? "pr-14" : ""}`}
       />
-      {canUsePlaceholder ? (
+      {hasCustomAction ? (
+        <button
+          type="button"
+          className="absolute right-2 top-1/2 -translate-y-1/2 border-0 bg-transparent! p-0 text-xs font-medium text-zinc-400 underline underline-offset-2 shadow-none! transition-colors hover:bg-transparent! hover:text-zinc-500 dark:text-zinc-500 dark:hover:bg-transparent! dark:hover:text-zinc-400"
+          onClick={() => onAction?.()}
+        >
+          {actionLabel}
+        </button>
+      ) : showUseClearAction ? (
         <button
           type="button"
           className="absolute right-2 top-1/2 -translate-y-1/2 border-0 bg-transparent! p-0 text-xs font-medium text-zinc-400 underline underline-offset-2 shadow-none! transition-colors hover:bg-transparent! hover:text-zinc-500 dark:text-zinc-500 dark:hover:bg-transparent! dark:hover:text-zinc-400"
@@ -136,9 +148,8 @@ function sourceFromServerSettings(s: HostLlmSettingsPublic): "preset" | "local" 
   return "api";
 }
 
-/** Initial Type when opening the form: API by default when the room still uses server preset. */
 function guessInitialSource(s: HostLlmSettingsPublic): "preset" | "local" | "api" {
-  if (s.mode === "preset") return "api";
+  if (s.mode === "preset" && !s.hasRoomConfig) return "api";
   return sourceFromServerSettings(s);
 }
 
@@ -150,14 +161,13 @@ export function HostLlmPanel({
   readOnlyNotice,
 }: HostLlmPanelProps) {
   const formId = useId();
-  const pendingResetUiRef = useRef(false);
   const [source, setSource] = useState<"preset" | "local" | "api">(() =>
     guessInitialSource(settings)
   );
+  const [presetPasscode, setPresetPasscode] = useState("");
+  const [presetPasscodeVerified, setPresetPasscodeVerified] = useState(false);
   /** True until a successful Save after changing Type, or when the initial Type draft matches saved server intent. */
-  const [typeNeedsSave, setTypeNeedsSave] = useState(
-    () => guessInitialSource(settings) !== sourceFromServerSettings(settings)
-  );
+  const [typeNeedsSave, setTypeNeedsSave] = useState(false);
   const [provider, setProvider] = useState<
     "ollama" | "openai" | "gemini" | "custom"
   >(
@@ -202,60 +212,11 @@ export function HostLlmPanel({
     settings.modelByAgent.translator ?? ""
   );
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [validateBusy, setValidateBusy] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
-
-  const applySettingsFromServer = useCallback(
-    (s: HostLlmSettingsPublic, opts?: { afterReset?: boolean }) => {
-      const nextSource =
-        opts?.afterReset && s.mode === "preset"
-          ? "api"
-          : s.mode === "preset"
-            ? "preset"
-            : sourceFromServerSettings(s);
-      setSource(nextSource);
-      setProvider(s.provider);
-      setOllamaHost(s.ollamaHost);
-      setOllamaModel(s.ollamaModel);
-      setOpenaiBaseUrl(s.openaiBaseUrl);
-      setOpenaiModel(s.openaiModel);
-      setOpenaiKeyInput("");
-      setClearOpenAiKey(false);
-      setGeminiBaseUrl(s.geminiBaseUrl);
-      setGeminiModel(s.geminiModel);
-      setGeminiKeyInput("");
-      setClearGeminiKey(false);
-      setCustomBaseUrl(s.customBaseUrl);
-      setCustomPath(s.customPath);
-      setCustomMethod(s.customMethod);
-      setCustomHeadersTemplate(s.customHeadersTemplate);
-      setCustomBodyTemplate(s.customBodyTemplate);
-      setCustomResponsePath(s.customResponsePath);
-      setCustomModel(s.customModel);
-      setCustomApiKeyInput("");
-      setClearCustomApiKey(false);
-      setModelSetup(s.modelByAgent.setup ?? "");
-      setModelNarrator(s.modelByAgent.narrator ?? "");
-      setModelScene(s.modelByAgent.scene ?? "");
-      setModelOutcome(s.modelByAgent.outcome ?? "");
-      setModelTranslator(s.modelByAgent.translator ?? "");
-      if (opts?.afterReset) {
-        setAdvancedOpen(false);
-        setTypeNeedsSave(false);
-      }
-      setTestMessage(null);
-    },
-    []
-  );
-
-  const prevSavingRef = useRef(false);
-  useEffect(() => {
-    if (prevSavingRef.current && !saving && pendingResetUiRef.current) {
-      pendingResetUiRef.current = false;
-      applySettingsFromServer(settings, { afterReset: true });
-    }
-    prevSavingRef.current = saving;
-  }, [saving, settings, applySettingsFromServer]);
+  const [spinnerFrame, setSpinnerFrame] = useState(0);
 
   const canRunSavedTest = Boolean(
     canEdit && isRoomLlmReadyPublic(settings)
@@ -331,7 +292,25 @@ export function HostLlmPanel({
                 customBodyTemplate.trim() !== settings.customBodyTemplate ||
                 customResponsePath.trim() !== settings.customResponsePath ||
                 customModel.trim() !== settings.customModel)));
+  const canValidateSaved = canRunSavedTest && !hasUnsavedChanges;
   const canTestSaved = canTestNow && !hasUnsavedChanges;
+  const presetPasscodeTrimmed = presetPasscode.trim();
+  const presetPasscodeRequired = source === "preset";
+  const presetPasscodeMissing = presetPasscodeRequired && !presetPasscodeTrimmed;
+  const canRunPresetActions =
+    source !== "preset" || presetPasscodeVerified;
+  const busyNow = validateBusy || testBusy;
+
+  useEffect(() => {
+    if (!busyNow) {
+      setSpinnerFrame(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setSpinnerFrame((prev) => (prev + 1) % 4);
+    }, 130);
+    return () => window.clearInterval(id);
+  }, [busyNow]);
 
   const inputClass =
     "crt-action-input rounded-lg border-2 border-violet-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-zinc-100";
@@ -349,20 +328,20 @@ export function HostLlmPanel({
   const openaiEndpointPlaceholder = "https://api.openai.com/v1";
   const openaiModelPlaceholder = "gpt-4o-mini";
   const openaiKeyPlaceholder = settings.hasOpenAiKey
-    ? "Leave blank to keep existing key"
+    ? "Keep existing key"
     : "sk-...";
   const geminiEndpointPlaceholder =
     "https://generativelanguage.googleapis.com/v1beta";
   const geminiModelPlaceholder = "gemini-1.5-flash";
   const geminiKeyPlaceholder = settings.hasGeminiKey
-    ? "Leave blank to keep existing key"
+    ? "Keep existing key"
     : "AIza...";
   const customEndpointPlaceholder = "https://provider.example.com";
   const customPathPlaceholder = "v1/generate";
   const customModelPlaceholder = "any-model-name";
   const customResponsePathPlaceholder = "data.output.text";
   const customApiKeyPlaceholder = settings.hasCustomApiKey
-    ? "Leave blank to keep existing key"
+    ? "Keep existing key"
     : "optional";
   const customHeadersPlaceholder =
     '{"Content-Type":"application/json","Authorization":"Bearer {{api_key}}"}';
@@ -514,40 +493,54 @@ export function HostLlmPanel({
     </div>
   ) : null;
 
+  const buildCurrentCustomBody = (): SetHostLlmBody => ({
+    mode: "custom",
+    useCustomLlm: true,
+    provider,
+    ollamaHost,
+    ollamaModel,
+    openaiBaseUrl,
+    openaiModel,
+    geminiBaseUrl,
+    geminiModel,
+    customBaseUrl,
+    customPath,
+    customMethod,
+    customHeadersTemplate,
+    customBodyTemplate,
+    customResponsePath,
+    customModel,
+    modelByAgent: {
+      setup: modelSetup,
+      narrator: modelNarrator,
+      scene: modelScene,
+      outcome: modelOutcome,
+      translator: modelTranslator,
+    },
+  });
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canEdit) return;
     if (source === "preset") {
+      setSaveMessage(null);
       setTestMessage(null);
-      const ok = await onSave({ mode: "preset", useCustomLlm: false });
-      if (ok) setTypeNeedsSave(false);
+      const result = await onSave({
+        mode: "preset",
+        useCustomLlm: false,
+        presetPasscode: presetPasscodeTrimmed,
+      });
+      if (result.ok) {
+        setTypeNeedsSave(false);
+        setPresetPasscode("");
+        setPresetPasscodeVerified(true);
+      } else if (result.error) {
+        setPresetPasscodeVerified(false);
+        setSaveMessage(result.error);
+      }
       return;
     }
-    const body: SetHostLlmBody = {
-      mode: "custom",
-      useCustomLlm: true,
-      provider,
-      ollamaHost,
-      ollamaModel,
-      openaiBaseUrl,
-      openaiModel,
-      geminiBaseUrl,
-      geminiModel,
-      customBaseUrl,
-      customPath,
-      customMethod,
-      customHeadersTemplate,
-      customBodyTemplate,
-      customResponsePath,
-      customModel,
-      modelByAgent: {
-        setup: modelSetup,
-        narrator: modelNarrator,
-        scene: modelScene,
-        outcome: modelOutcome,
-        translator: modelTranslator,
-      },
-    };
+    const body: SetHostLlmBody = buildCurrentCustomBody();
     if (provider === "openai") {
       if (clearOpenAiKey) {
         body.openaiApiKey = "";
@@ -569,21 +562,56 @@ export function HostLlmPanel({
         body.customApiKey = customApiKeyInput.trim();
       }
     }
+    setSaveMessage(null);
     setTestMessage(null);
-    const ok = await onSave(body);
-    if (ok) setTypeNeedsSave(false);
+    const result = await onSave(body);
+    if (result.ok) {
+      setTypeNeedsSave(false);
+      setOpenaiKeyInput("");
+      setGeminiKeyInput("");
+      setCustomApiKeyInput("");
+      setClearOpenAiKey(false);
+      setClearGeminiKey(false);
+      setClearCustomApiKey(false);
+    } else if (result.error) {
+      setSaveMessage(result.error);
+    }
   };
 
-  const handleClearCredentials = async () => {
-    if (!canEdit) return;
+  const handleRemoveStoredKeyNow = async (
+    keyKind: "openai" | "gemini" | "custom"
+  ) => {
+    if (!canEdit || saving) return;
+    setSaveMessage(null);
     setTestMessage(null);
-    pendingResetUiRef.current = true;
-    const ok = await onSave({ mode: "preset", useCustomLlm: false });
-    if (!ok) pendingResetUiRef.current = false;
+    const body: SetHostLlmBody = buildCurrentCustomBody();
+    body.allowIncompleteSave = true;
+    if (keyKind === "openai") body.openaiApiKey = "";
+    if (keyKind === "gemini") body.geminiApiKey = "";
+    if (keyKind === "custom") body.customApiKey = "";
+    const result = await onSave(body);
+    if (result.ok) {
+      setTypeNeedsSave(false);
+      if (keyKind === "openai") {
+        setOpenaiKeyInput("");
+        setClearOpenAiKey(false);
+      }
+      if (keyKind === "gemini") {
+        setGeminiKeyInput("");
+        setClearGeminiKey(false);
+      }
+      if (keyKind === "custom") {
+        setCustomApiKeyInput("");
+        setClearCustomApiKey(false);
+      }
+    } else if (result.error) {
+      setSaveMessage(result.error);
+    }
   };
 
   const handleTestSaved = async () => {
     if (!canRunSavedTest) return;
+    setSaveMessage(null);
     setTestBusy(true);
     setTestMessage(null);
     try {
@@ -611,6 +639,46 @@ export function HostLlmPanel({
       setTestBusy(false);
     }
   };
+
+  const handleValidateSaved = async () => {
+    if (!canRunSavedTest) return;
+    setSaveMessage(null);
+    setValidateBusy(true);
+    setTestMessage(null);
+    try {
+      const res = await fetch("/api/game/host-llm/validate", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setTestMessage(data.error ?? "Connection validation failed");
+        return;
+      }
+      setTestMessage(data.message ?? "Endpoint validation passed");
+    } catch {
+      setTestMessage("Could not reach the server");
+    } finally {
+      setValidateBusy(false);
+    }
+  };
+
+  const spinnerChar = ["|", "/", "-", "\\"][spinnerFrame] ?? "|";
+  const busyStatusMessage = validateBusy
+    ? `Validating endpoint... ${spinnerChar}`
+    : testBusy
+      ? `Running prompt test... ${spinnerChar}`
+      : null;
+  const sectionSaveError = !busyNow ? saveMessage : null;
+  const presetPasscodeError =
+    source === "preset" ? sectionSaveError : null;
+  const adapterSectionError =
+    source !== "preset" ? sectionSaveError : null;
+  const bottomStatusMessage = testMessage;
 
   return (
     <div className="flex flex-col gap-4 text-left">
@@ -650,6 +718,9 @@ export function HostLlmPanel({
                       ? "local"
                       : "preset";
                 setSource(next);
+                if (next === "preset") {
+                  setPresetPasscodeVerified(false);
+                }
                 setTypeNeedsSave(true);
               }}
               buttonClassName={pickerButtonClass}
@@ -659,14 +730,30 @@ export function HostLlmPanel({
 
           {source === "preset" ? (
             <div className="mt-4 flex flex-col gap-3 border-t border-violet-200/50 pt-4 dark:border-violet-800/30">
-              <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                Preset uses server defaults that you already prepared.
-              </p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {settings.presetReady
-                  ? "Preset AI is ready."
-                  : "Preset AI is not ready on this server yet."}
-              </p>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                  Preset passcode
+                </span>
+                <input
+                  value={presetPasscode}
+                  onChange={(ev) => {
+                    setPresetPasscode(ev.target.value);
+                    setPresetPasscodeVerified(false);
+                  }}
+                  placeholder="Enter passcode"
+                  autoComplete="off"
+                  className={`${inputClass} w-full`}
+                  type="password"
+                />
+              </label>
+              {presetPasscodeError ? (
+                <p
+                  className="font-mono text-[11px] text-zinc-800 dark:text-zinc-200"
+                  role="status"
+                >
+                  {presetPasscodeError}
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="mt-4 flex flex-col gap-3 border-t border-violet-200/50 pt-4 dark:border-violet-800/30">
@@ -986,23 +1073,21 @@ export function HostLlmPanel({
                     </span>
                     <InputWithUseButton
                       value={openaiKeyInput}
-                      onChange={setOpenaiKeyInput}
+                      onChange={(value) => {
+                        setOpenaiKeyInput(value);
+                        if (clearOpenAiKey) setClearOpenAiKey(false);
+                      }}
                       placeholder={openaiKeyPlaceholder}
                       inputClass={inputClass}
                       type="password"
+                      actionLabel={settings.hasOpenAiKey ? "Remove key" : undefined}
+                      onAction={
+                        settings.hasOpenAiKey
+                          ? () => void handleRemoveStoredKeyNow("openai")
+                          : undefined
+                      }
                     />
                   </label>
-                  {settings.hasOpenAiKey ? (
-                    <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                      <input
-                        type="checkbox"
-                        checked={clearOpenAiKey}
-                        onChange={(ev) => setClearOpenAiKey(ev.target.checked)}
-                        className="h-4 w-4 rounded border-zinc-400"
-                      />
-                      <span>Remove stored API key for this room</span>
-                    </label>
-                  ) : null}
                 </>
               ) : provider === "gemini" ? (
                 <>
@@ -1012,23 +1097,21 @@ export function HostLlmPanel({
                     </span>
                     <InputWithUseButton
                       value={geminiKeyInput}
-                      onChange={setGeminiKeyInput}
+                      onChange={(value) => {
+                        setGeminiKeyInput(value);
+                        if (clearGeminiKey) setClearGeminiKey(false);
+                      }}
                       placeholder={geminiKeyPlaceholder}
                       inputClass={inputClass}
                       type="password"
+                      actionLabel={settings.hasGeminiKey ? "Remove key" : undefined}
+                      onAction={
+                        settings.hasGeminiKey
+                          ? () => void handleRemoveStoredKeyNow("gemini")
+                          : undefined
+                      }
                     />
                   </label>
-                  {settings.hasGeminiKey ? (
-                    <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                      <input
-                        type="checkbox"
-                        checked={clearGeminiKey}
-                        onChange={(ev) => setClearGeminiKey(ev.target.checked)}
-                        className="h-4 w-4 rounded border-zinc-400"
-                      />
-                      <span>Remove stored Gemini API key</span>
-                    </label>
-                  ) : null}
                 </>
               ) : provider === "custom" ? (
                 <>
@@ -1038,24 +1121,30 @@ export function HostLlmPanel({
                     </span>
                     <InputWithUseButton
                       value={customApiKeyInput}
-                      onChange={setCustomApiKeyInput}
+                      onChange={(value) => {
+                        setCustomApiKeyInput(value);
+                        if (clearCustomApiKey) setClearCustomApiKey(false);
+                      }}
                       placeholder={customApiKeyPlaceholder}
                       inputClass={inputClass}
                       type="password"
+                      actionLabel={settings.hasCustomApiKey ? "Remove key" : undefined}
+                      onAction={
+                        settings.hasCustomApiKey
+                          ? () => void handleRemoveStoredKeyNow("custom")
+                          : undefined
+                      }
                     />
                   </label>
-                  {settings.hasCustomApiKey ? (
-                    <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                      <input
-                        type="checkbox"
-                        checked={clearCustomApiKey}
-                        onChange={(ev) => setClearCustomApiKey(ev.target.checked)}
-                        className="h-4 w-4 rounded border-zinc-400"
-                      />
-                      <span>Remove stored custom API key</span>
-                    </label>
-                  ) : null}
                 </>
+              ) : null}
+              {adapterSectionError ? (
+                <p
+                  className="font-mono text-[11px] text-zinc-800 dark:text-zinc-200"
+                  role="status"
+                >
+                  {adapterSectionError}
+                </p>
               ) : null}
             </div>
           )}
@@ -1068,38 +1157,55 @@ export function HostLlmPanel({
               type="submit"
               loading={saving}
               loadingLabel="Saving…"
+              disabled={presetPasscodeMissing}
               className="crt-btn-cta w-full rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
               Save
             </BusyButton>
             {canEdit ? (
-              <button
-                type="button"
-                onClick={() => void handleClearCredentials()}
-                disabled={saving}
-                className="mt-2 w-full rounded-lg border-2 border-rose-500/40 px-4 py-2 text-sm font-semibold text-rose-800 transition-colors hover:bg-rose-500/10 disabled:opacity-40 dark:text-rose-200 dark:hover:bg-rose-950/40"
-              >
-                Reset
-              </button>
-            ) : null}
-            {canEdit ? (
-              <button
-                type="button"
-                onClick={() => void handleTestSaved()}
-                disabled={!canTestSaved || testBusy || saving}
-                className="crt-btn-cta mt-2 w-full rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40"
-              >
-                {testBusy ? "Testing…" : "Test connection"}
-              </button>
+              <div className="mt-2 grid w-full grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleValidateSaved()}
+                  disabled={
+                    !canValidateSaved ||
+                    !canRunPresetActions ||
+                    validateBusy ||
+                    testBusy ||
+                    saving
+                  }
+                  className="crt-btn-cta w-full rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40"
+                  aria-busy={validateBusy}
+                >
+                  {validateBusy
+                    ? `${spinnerChar} Validating...`
+                    : "Validate endpoint"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleTestSaved()}
+                  disabled={
+                    !canTestSaved ||
+                    !canRunPresetActions ||
+                    testBusy ||
+                    validateBusy ||
+                    saving
+                  }
+                  className="crt-btn-cta w-full rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40"
+                  aria-busy={testBusy}
+                >
+                  {testBusy ? `${spinnerChar} Running...` : "Run prompt test"}
+                </button>
+              </div>
             ) : null}
           </fieldset>
         </section>
-        {testMessage ? (
+        {busyStatusMessage || bottomStatusMessage ? (
           <p
             className="font-mono text-[11px] text-zinc-800 dark:text-zinc-200"
             role="status"
           >
-            {testMessage}
+            {busyStatusMessage ?? bottomStatusMessage}
           </p>
         ) : null}
       </form>

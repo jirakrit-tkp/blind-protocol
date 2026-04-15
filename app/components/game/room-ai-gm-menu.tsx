@@ -35,7 +35,7 @@ GearIcon.displayName = "GearIcon";
 export type RoomAiGmMenuProps = {
   settings: HostLlmSettingsPublic;
   saving: boolean;
-  onSave: (body: SetHostLlmBody) => Promise<boolean>;
+  onSave: (body: SetHostLlmBody) => Promise<{ ok: boolean; error?: string }>;
   canEdit: boolean;
   /** Shown when the viewer cannot edit (not host or not in lobby). */
   readOnlyNotice?: string;

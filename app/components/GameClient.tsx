@@ -539,7 +539,6 @@ function GameClient() {
   }, [roomState, myPlayerId]);
 
   const handleSaveHostLlm = async (body: SetHostLlmBody) => {
-    setError("");
     setHostLlmSaving(true);
     try {
       const res = await fetch("/api/game/host-llm", {
@@ -550,11 +549,13 @@ function GameClient() {
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setError(data.error ?? "Could not save AI settings");
-        return false;
+        return {
+          ok: false,
+          error: data.error ?? "Could not save AI settings",
+        };
       }
       await pullGameState();
-      return true;
+      return { ok: true };
     } finally {
       setHostLlmSaving(false);
     }

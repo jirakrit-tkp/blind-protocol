@@ -6,6 +6,11 @@ import {
   mergeHostLlmUpdate,
   type SetHostLlmBody,
 } from "./host-llm-config";
+import {
+  decryptHostLlmSecretsFromStorage,
+  hasAnyHostLlmSecret,
+  isSecretsEncryptionConfigured,
+} from "./host-llm-secrets";
 import type { Player, Room, RoomLog } from "./types";
 import {
   MAX_DISPLAY_NAME_LENGTH,
@@ -97,7 +102,9 @@ export function normalizeRoom(raw: unknown, roomId: string): Room {
     base.voteOutcome = o.voteOutcome as Room["voteOutcome"];
   }
   const hostLlm = coerceHostLlmFromSnapshot(o.hostLlm);
-  if (hostLlm) base.hostLlm = hostLlm;
+  if (hostLlm) {
+    base.hostLlm = decryptHostLlmSecretsFromStorage(hostLlm);
+  }
   base.id = roomId;
   return base;
 }
@@ -353,8 +360,37 @@ export function handleSetHostLlm(
   if (!isRoomHost(r, playerId)) {
     return { ok: false, error: "Only the room host can change AI credentials" };
   }
+  if (body.reset) {
+    r.hostLlm = undefined;
+    return { ok: true, room: r };
+  }
+  const wantsPreset =
+    body.mode === "preset" || !body.useCustomLlm;
+  if (wantsPreset) {
+    const expectedPasscode = process.env.GAME_PASSCODE?.trim() ?? "";
+    if (!expectedPasscode) {
+      return {
+        ok: false,
+        error: "Preset passcode is not configured on this server",
+      };
+    }
+    const suppliedPasscode = body.presetPasscode?.trim() ?? "";
+    if (!suppliedPasscode) {
+      return { ok: false, error: "Preset passcode is required" };
+    }
+    if (suppliedPasscode !== expectedPasscode) {
+      return { ok: false, error: "Preset passcode is incorrect" };
+    }
+  }
   const merged = mergeHostLlmUpdate(r.hostLlm, body);
   if (!merged.ok) return { ok: false, error: merged.error };
+  if (hasAnyHostLlmSecret(merged.config) && !isSecretsEncryptionConfigured()) {
+    return {
+      ok: false,
+      error:
+        "Server secret encryption key is missing. Set LLM_SECRETS_KEY (or GAME_PASSCODE fallback) before saving API keys.",
+    };
+  }
   r.hostLlm = merged.config;
   return { ok: true, room: r };
 }
