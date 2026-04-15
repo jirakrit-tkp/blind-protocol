@@ -44,14 +44,15 @@ export async function POST() {
     }
     if (!isRoomLlmConfigured(room.hostLlm)) {
       return NextResponse.json(
-        { error: "Save LLM credentials first, then run the test" },
+        { error: "Set AI source first (prepared or custom), then run the test" },
         { status: 400 }
       );
     }
 
     const reply = await completeLlmPrompt(
       "Reply with exactly one word: OK",
-      room.hostLlm
+      room.hostLlm,
+      "test"
     );
     const trimmed = reply.trim().slice(0, 500);
     return NextResponse.json({ ok: true, replyPreview: trimmed });

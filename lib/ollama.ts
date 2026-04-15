@@ -1,4 +1,5 @@
 import { completeLlmPrompt } from "./llm-client";
+import type { LlmAgentKind } from "./llm-client";
 import type { HostLlmRoomConfig, WorldState } from "./types";
 import {
   MISSION_SUCCESS,
@@ -8,9 +9,10 @@ import {
 
 export async function askAI(
   prompt: string,
-  hostLlm?: HostLlmRoomConfig | null
+  hostLlm?: HostLlmRoomConfig | null,
+  agent: LlmAgentKind = "narrator"
 ): Promise<string> {
-  return completeLlmPrompt(prompt, hostLlm ?? null);
+  return completeLlmPrompt(prompt, hostLlm ?? null, agent);
 }
 
 /** Generate situation + initial world state from theme + optional brief */
@@ -44,7 +46,7 @@ World state rules (critical):
 Respond with ONLY valid JSON. situation must be in Thai:
 {"situation":"เราคือ...","worldState":{"key":"value","key2":123}}`;
 
-  const raw = await askAI(prompt, hostLlm);
+  const raw = await askAI(prompt, hostLlm, "setup");
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     return {
@@ -388,7 +390,7 @@ export async function ensureNarrativeThaiOnly(
     const prompt = `The text below may contain Chinese, English, Korean, or other languages alone or mixed with Thai. Rewrite as ONE continuous paragraph in Thai ONLY (Thai script). Preserve who does what, dialogue meaning, and tension; translate any non-Thai into natural Thai. No other scripts, no meta-commentary, no notes:
 
 ${t}`;
-    return parseNarratorOutput(await askAI(prompt, hostLlm));
+    return parseNarratorOutput(await askAI(prompt, hostLlm, "translator"));
   } catch {
     return t;
   }
@@ -420,7 +422,8 @@ export async function runThreeLayerPlayerTurn(params: {
   try {
     narrativeRaw = await askAI(
       buildNarratorPrompt(situation, recentActions, playerAction, worldState),
-      hostLlm
+      hostLlm,
+      "narrator"
     );
   } catch {
     narrativeRaw = `[ห้องสั่น — ระบบเล่าเรื่องไม่พร้อม]`;
@@ -432,7 +435,8 @@ export async function runThreeLayerPlayerTurn(params: {
   try {
     sceneRaw = await askAI(
       buildSceneDeltaPrompt(situation, worldState, narrative, playerAction),
-      hostLlm
+      hostLlm,
+      "scene"
     );
   } catch {
     sceneRaw = "";
@@ -445,7 +449,8 @@ export async function runThreeLayerPlayerTurn(params: {
   try {
     outcomeRaw = await askAI(
       buildOutcomePrompt(situation, worldAfterScene, narrative, playerAction),
-      hostLlm
+      hostLlm,
+      "outcome"
     );
   } catch {
     outcomeRaw = "";
@@ -472,7 +477,8 @@ export async function runThreeLayerAftermathStep(params: {
   try {
     narrativeRaw = await askAI(
       buildAftermathNarratorPrompt(situation, recentEvents, worldState),
-      hostLlm
+      hostLlm,
+      "narrator"
     );
   } catch {
     narrativeRaw = `[เหตุการณ์ดำเนินต่อ — ระบบ AI ไม่พร้อม]`;
@@ -484,7 +490,8 @@ export async function runThreeLayerAftermathStep(params: {
   try {
     sceneRaw = await askAI(
       buildAftermathSceneDeltaPrompt(situation, worldState, narrative),
-      hostLlm
+      hostLlm,
+      "scene"
     );
   } catch {
     sceneRaw = "";
@@ -497,7 +504,8 @@ export async function runThreeLayerAftermathStep(params: {
   try {
     outcomeRaw = await askAI(
       buildAftermathOutcomePrompt(situation, worldAfterScene, narrative),
-      hostLlm
+      hostLlm,
+      "outcome"
     );
   } catch {
     outcomeRaw = "";

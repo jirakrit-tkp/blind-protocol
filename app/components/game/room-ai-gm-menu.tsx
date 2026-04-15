@@ -34,9 +34,8 @@ GearIcon.displayName = "GearIcon";
 
 export type RoomAiGmMenuProps = {
   settings: HostLlmSettingsPublic;
-  formNonce: number;
   saving: boolean;
-  onSave: (body: SetHostLlmBody) => Promise<void>;
+  onSave: (body: SetHostLlmBody) => Promise<boolean>;
   canEdit: boolean;
   /** Shown when the viewer cannot edit (not host or not in lobby). */
   readOnlyNotice?: string;
@@ -44,7 +43,6 @@ export type RoomAiGmMenuProps = {
 
 export function RoomAiGmMenu({
   settings,
-  formNonce,
   saving,
   onSave,
   canEdit,
@@ -55,16 +53,6 @@ export function RoomAiGmMenu({
   const dialogId = useId();
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
-
-  const panelKey = `${[
-    settings.useCustomLlm,
-    settings.provider,
-    settings.hasOpenAiKey,
-    settings.ollamaHost,
-    settings.ollamaModel,
-    settings.openaiBaseUrl,
-    settings.openaiModel,
-  ].join("|")}|${formNonce}`;
 
   const aiReady = isRoomLlmReadyPublic(settings);
 
@@ -109,17 +97,14 @@ export function RoomAiGmMenu({
               if (e.key === "Escape") setOpen(false);
             }}
           >
-            <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-violet-200/50 pb-3 dark:border-violet-800/30">
+            <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-violet-200/50 pb-3 dark:border-violet-800/30">
               <div className="min-w-0 text-left">
                 <h2
                   id={titleId}
                   className="text-base font-semibold uppercase tracking-wide text-zinc-900 dark:text-zinc-100"
                 >
-                  AI / GM
+                  AI configuration
                 </h2>
-                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  {aiReady ? "Credentials saved" : "LLM not configured"}
-                </p>
               </div>
               <button
                 ref={closeRef}
@@ -131,7 +116,6 @@ export function RoomAiGmMenu({
               </button>
             </header>
             <HostLlmPanel
-              key={panelKey}
               settings={settings}
               saving={saving}
               onSave={onSave}

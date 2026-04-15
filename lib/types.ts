@@ -15,13 +15,28 @@ export type WorldState = Record<string, string | number | boolean>;
 
 /** Host-only LLM overrides; stored in room snapshot, never sent in public client state. */
 export type HostLlmRoomConfig = {
+  /** `preset` = server-provided defaults, `custom` = per-room credentials. */
+  mode?: "preset" | "custom";
   useCustomLlm: boolean;
-  provider: "ollama" | "openai";
+  provider: "ollama" | "openai" | "gemini" | "custom";
   ollamaHost: string;
   ollamaModel: string;
   openaiBaseUrl: string;
   openaiModel: string;
   openaiApiKey?: string;
+  geminiBaseUrl: string;
+  geminiModel: string;
+  geminiApiKey?: string;
+  customBaseUrl: string;
+  customPath: string;
+  customMethod: "GET" | "POST" | "PUT" | "PATCH";
+  customHeadersTemplate: string;
+  customBodyTemplate: string;
+  customResponsePath: string;
+  customModel: string;
+  customApiKey?: string;
+  /** Optional per-agent model override keys (empty = use provider default model). */
+  modelByAgent?: Partial<Record<"setup" | "narrator" | "scene" | "outcome" | "translator" | "test", string>>;
 };
 
 export type Room = {

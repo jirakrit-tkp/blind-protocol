@@ -394,7 +394,7 @@ export function handleStartGame(
     return {
       ok: false,
       error:
-        "Host must configure AI (gear menu): save Ollama or OpenAI credentials before starting.",
+        "Host must configure AI (gear menu): choose prepared AI or save room credentials before starting.",
     };
   }
 
@@ -455,7 +455,7 @@ export async function handlePlayerAction(
     return {
       ok: false,
       error:
-        "This room has no LLM configuration. The host must set credentials in the lobby before starting.",
+        "This room has no LLM configuration. The host must choose prepared AI or set credentials in the lobby before starting.",
     };
   }
   if (!isSystemProtagonistPlayable(r.worldState)) {

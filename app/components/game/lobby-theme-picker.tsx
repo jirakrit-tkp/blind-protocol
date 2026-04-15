@@ -19,6 +19,8 @@ export type LobbyThemePickerProps = {
   /** True while the parent is saving the theme to the server. */
   isApplying?: boolean;
   "aria-labelledby"?: string;
+  /** Accessible name when not using aria-labelledby (default: scenario theme). */
+  buttonAriaLabel?: string;
 };
 
 export function LobbyThemePicker({
@@ -29,6 +31,7 @@ export function LobbyThemePicker({
   uppercaseLabels = false,
   isApplying = false,
   "aria-labelledby": ariaLabelledBy,
+  buttonAriaLabel = "Scenario theme",
 }: LobbyThemePickerProps) {
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -128,7 +131,7 @@ export function LobbyThemePicker({
         aria-expanded={open && !isApplying}
         aria-controls={listId}
         aria-labelledby={ariaLabelledBy}
-        aria-label={ariaLabelledBy ? undefined : "Scenario theme"}
+        aria-label={ariaLabelledBy ? undefined : buttonAriaLabel}
         aria-activedescendant={
           open && !isApplying ? `${listId}-opt-${highlight}` : undefined
         }
@@ -168,6 +171,11 @@ export function LobbyThemePicker({
                 }`}
                 onMouseEnter={() => setHighlight(i)}
                 onMouseDown={(e) => e.preventDefault()}
+                onPointerUp={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  pick(label);
+                }}
                 onClick={() => pick(label)}
               >
                 <span

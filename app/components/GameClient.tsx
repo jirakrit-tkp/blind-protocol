@@ -101,7 +101,6 @@ function GameClient() {
   const [hostLlmSettings, setHostLlmSettings] =
     useState<HostLlmSettingsPublic | null>(null);
   const [hostLlmSaving, setHostLlmSaving] = useState(false);
-  const [hostLlmFormNonce, setHostLlmFormNonce] = useState(0);
   const [lobbyRenameSaving, setLobbyRenameSaving] = useState(false);
   const [resetSubmitting, setResetSubmitting] = useState(false);
 
@@ -552,10 +551,10 @@ function GameClient() {
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
         setError(data.error ?? "Could not save AI settings");
-        return;
+        return false;
       }
-      setHostLlmFormNonce((n) => n + 1);
       await pullGameState();
+      return true;
     } finally {
       setHostLlmSaving(false);
     }
@@ -759,7 +758,6 @@ function GameClient() {
           {roomState ? (
             <RoomAiGmMenu
               settings={hostLlmSettings ?? hostLlmToPublicSettings(undefined)}
-              formNonce={hostLlmFormNonce}
               saving={hostLlmSaving}
               onSave={handleSaveHostLlm}
               canEdit={canEditRoomLlm}
@@ -774,7 +772,7 @@ function GameClient() {
             <button
               type="button"
               onClick={() => handleThemeChange("light")}
-              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
+              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide first:rounded-l-sm last:rounded-r-sm ${
                 uiTheme === "light" ? "is-active" : ""
               }`}
               aria-pressed={uiTheme === "light"}
@@ -785,7 +783,7 @@ function GameClient() {
             <button
               type="button"
               onClick={() => handleThemeChange("dark")}
-              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
+              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide first:rounded-l-sm last:rounded-r-sm ${
                 uiTheme === "dark" ? "is-active" : ""
               }`}
               aria-pressed={uiTheme === "dark"}
