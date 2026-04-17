@@ -33,15 +33,29 @@ ${briefPart}
 
 Generate a game setup. Write EVERYTHING in Thai.
 
+Design style requirement (must follow):
+- Follow docs/scenario-design.md pattern used by the "gold shop robbery" reference.
+- Scenario must clearly encode 2 layers:
+  1) Rules (what immediately means mission fail) -> worldState keys with rule_*
+  2) Goals (what clearly means mission success) -> worldState keys with goal_*
+- The mission in situation must define success as an observable real-world outcome, not merely "called for help" or "reported incident".
+- Situation should describe observable opening state (what the protagonist can perceive now), and worldState should mirror that opening consistently.
+
 1. situation: 2-3 sentences. Use "เรา" (we)—start with "เราคือ..." or "เราเป็น...". The MISSION must be CONCRETE and ACTIONABLE—a specific task we can do right away. NOT vague investigation.
    - Good: "ภารกิจคือเปิดประตูห้องควบคุม", "ภารกิจคือซ่อมเครื่องยนต์ให้ทำงาน", "ภารกิจคือนำกุญแจ 3 ดอกมาที่ประตูหลัก"
    - Bad: "ค้นหาเหตุผลการหายตัว", "สอบสวนเรื่องราวประหลาด", "สำรวจสถานีลึกลับ"—too vague, no clear action.
-2. worldState: 4-8 key-value pairs. MUST include system_protagonist_alive: "yes". Use snake_case keys.
+2. worldState: 8-16 key-value pairs. MUST include:
+   - system_protagonist_alive: "yes"
+   - at least one rule_* key initialized to "no"
+   - at least one goal_* key initialized to "no"
+   Use snake_case keys.
 
 World state rules (critical):
 - ALWAYS include system_protagonist_alive: "yes" (required) — system: players can still control the shared protagonist
-- Store environment conditions: locked/unlocked, damaged/intact, on/off, level (0-100)
-- NO counts, NO event flags, NO mental/social state
+- Prefer observable environment/situation states (doors, lights, exits, threat visibility, nearby resources, crowd/noise, etc.)
+- rule_* means fail condition happened ("yes" = failed)
+- goal_* means success condition happened ("yes" = achieved)
+- Keep values concise and concrete
 
 Respond with ONLY valid JSON. situation must be in Thai:
 {"situation":"เราคือ...","worldState":{"key":"value","key2":123}}`;

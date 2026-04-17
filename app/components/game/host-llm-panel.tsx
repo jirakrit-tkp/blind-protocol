@@ -170,9 +170,7 @@ export function HostLlmPanel({
   const [typeNeedsSave, setTypeNeedsSave] = useState(false);
   const [provider, setProvider] = useState<
     "ollama" | "openai" | "gemini" | "custom"
-  >(
-    settings.provider
-  );
+  >(() => (settings.hasRoomConfig ? settings.provider : "openai"));
   const [ollamaHost, setOllamaHost] = useState(settings.ollamaHost);
   const [ollamaModel, setOllamaModel] = useState(settings.ollamaModel);
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState(settings.openaiBaseUrl);
@@ -317,7 +315,7 @@ export function HostLlmPanel({
   const pickerButtonClass =
     "crt-card w-full rounded-lg border-2 px-3 py-2 font-mono text-xs text-zinc-900 transition-colors hover:bg-[color-mix(in_srgb,var(--crt-panel)_70%,var(--crt-bg)_30%)] dark:text-zinc-100";
   const sourceLabels = ["API", "Local", "Preset"] as const;
-  const adapterLabels = ["Ollama", "OpenAI", "Gemini", "Custom"] as const;
+  const adapterLabels = ["Custom", "Gemini", "Ollama", "OpenAI"] as const;
   const methodLabels = ["POST", "PUT", "PATCH", "GET"] as const;
   const simpleAdvancedToggleClass =
     "crt-mode-toggle inline-flex shrink-0 items-center rounded-md border";
@@ -1214,3 +1212,5 @@ export function HostLlmPanel({
 }
 
 HostLlmPanel.displayName = "HostLlmPanel";
+
+

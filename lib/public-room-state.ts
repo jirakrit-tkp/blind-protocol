@@ -9,7 +9,8 @@ export type PublicRoomState = {
   phase: "lobby" | "playing" | "voting" | "end";
   worldState: Record<string, string | number | boolean>;
   situation?: string;
-  lobbyTheme: string;
+  lobbyThemes: string[];
+  lobbyUseAiScenario: boolean;
   lobbyMode: "imposter" | "mission";
   votes: Record<string, string>;
   voteOutcome?: Room["voteOutcome"];
@@ -40,7 +41,8 @@ export function getPublicRoomState(
     phase: room.phase,
     worldState: room.worldState,
     situation: room.situation,
-    lobbyTheme: room.lobbyTheme,
+    lobbyThemes: [...room.lobbyThemes],
+    lobbyUseAiScenario: room.lobbyUseAiScenario,
     lobbyMode: room.lobbyMode,
     votes: { ...(room.votes ?? {}) },
     voteOutcome: room.voteOutcome,

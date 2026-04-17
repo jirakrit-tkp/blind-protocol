@@ -19,9 +19,9 @@ export async function POST(req: Request) {
     if (!roomId || !playerId) {
       return NextResponse.json({ error: "Not in a room" }, { status: 401 });
     }
-    const body = (await req.json()) as { theme?: string };
+    const body = (await req.json()) as { themes?: string[] };
     const out = await mutateGameRoom(roomId, async (room) => {
-      const r = handleSetLobbyTheme(room, playerId, body.theme);
+      const r = handleSetLobbyTheme(room, playerId, body.themes);
       if (!r.ok) return { ok: false, error: r.error };
       return { ok: true, room: r.room };
     });

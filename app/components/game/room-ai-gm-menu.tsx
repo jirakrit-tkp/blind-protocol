@@ -55,6 +55,16 @@ export function RoomAiGmMenu({
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const aiReady = isRoomLlmReadyPublic(settings);
+  const saveStatusLabel = settings.hasRoomConfig
+    ? aiReady
+      ? "Saved / Ready"
+      : "Saved / Needs attention"
+    : "Not saved";
+  const saveStatusClassName = settings.hasRoomConfig
+    ? aiReady
+      ? "text-emerald-700 dark:text-emerald-300"
+      : "text-amber-700 dark:text-amber-300"
+    : "text-zinc-500 dark:text-zinc-400";
 
   useEffect(() => {
     if (!open) return;
@@ -99,12 +109,26 @@ export function RoomAiGmMenu({
           >
             <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-violet-200/50 pb-3 dark:border-violet-800/30">
               <div className="min-w-0 text-left">
-                <h2
-                  id={titleId}
-                  className="text-base font-semibold uppercase tracking-wide text-zinc-900 dark:text-zinc-100"
-                >
-                  AI configuration
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2
+                    id={titleId}
+                    className="text-base font-semibold uppercase tracking-wide text-zinc-900 dark:text-zinc-100"
+                  >
+                    AI configuration
+                  </h2>
+                  <span
+                    className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500"
+                    aria-hidden="true"
+                  >
+                    -
+                  </span>
+                  <span
+                    className={`inline-flex text-[10px] font-medium uppercase tracking-wide ${saveStatusClassName}`}
+                    role="status"
+                  >
+                    {saveStatusLabel}
+                  </span>
+                </div>
               </div>
               <button
                 ref={closeRef}

@@ -20,8 +20,11 @@ import { formatLogsForGmPrompt } from "./gm-log-format";
 import { runThreeLayerAftermathStep, runThreeLayerPlayerTurn } from "./ollama";
 import {
   getThemeLabelsFromScenarioPool,
-  pickRandomScenarioFromPool,
+  getThemeOptionsForSelectionFromScenarioPool,
+  hasScenarioCombinationInPool,
+  pickRandomScenarioFromPoolByThemes,
 } from "./scenario-pool";
+import { generateGameSetup } from "./ollama";
 import {
   CHEAT_CMD_FAIL,
   CHEAT_CMD_SUCCESS,
@@ -45,6 +48,23 @@ export function defaultLobbyTheme(): string {
   return labels[0] ?? "";
 }
 
+function defaultLobbyThemes(): string[] {
+  return [];
+}
+
+function normalizeLobbyThemes(themes: readonly string[] | undefined): string[] {
+  const allowed = new Set(getThemeLabelsFromScenarioPool());
+  if (!themes) return [];
+  const normalized = Array.from(
+    new Set(
+      themes
+        .map((theme) => theme.trim())
+        .filter((theme) => theme.length > 0 && allowed.has(theme))
+    )
+  ).sort((a, b) => a.localeCompare(b, "th"));
+  return normalized;
+}
+
 export function normalizeRoom(raw: unknown, roomId: string): Room {
   const base: Room = {
     id: roomId,
@@ -54,7 +74,8 @@ export function normalizeRoom(raw: unknown, roomId: string): Room {
     roundIndex: 0,
     phase: "lobby",
     worldState: {},
-    lobbyTheme: defaultLobbyTheme(),
+    lobbyThemes: defaultLobbyThemes(),
+    lobbyUseAiScenario: false,
     lobbyMode: "imposter",
     votes: {},
   };
@@ -84,10 +105,17 @@ export function normalizeRoom(raw: unknown, roomId: string): Room {
     base.worldState = o.worldState as Room["worldState"];
   }
   if (typeof o.situation === "string") base.situation = o.situation;
-  if (typeof o.lobbyTheme === "string" && o.lobbyTheme.trim()) {
-    base.lobbyTheme = o.lobbyTheme;
-  } else if (typeof o.lobbyTheme !== "string" || !o.lobbyTheme.trim()) {
-    base.lobbyTheme = defaultLobbyTheme();
+  if (Array.isArray(o.lobbyThemes)) {
+    base.lobbyThemes = normalizeLobbyThemes(
+      o.lobbyThemes.filter((v): v is string => typeof v === "string")
+    );
+  } else if (typeof o.lobbyTheme === "string" && o.lobbyTheme.trim()) {
+    base.lobbyThemes = normalizeLobbyThemes([o.lobbyTheme]);
+  } else {
+    base.lobbyThemes = defaultLobbyThemes();
+  }
+  if (typeof o.lobbyUseAiScenario === "boolean") {
+    base.lobbyUseAiScenario = o.lobbyUseAiScenario;
   }
   if (o.lobbyMode === "imposter" || o.lobbyMode === "mission") {
     base.lobbyMode = o.lobbyMode;
@@ -252,7 +280,8 @@ export function resetMainRoomToLobby(room: Room): Room {
   room.phase = "lobby";
   room.worldState = {};
   delete room.situation;
-  room.lobbyTheme = defaultLobbyTheme();
+  room.lobbyThemes = defaultLobbyThemes();
+  room.lobbyUseAiScenario = false;
   room.lobbyMode = "imposter";
   room.votes = {};
   room.voteOutcome = undefined;
@@ -313,18 +342,45 @@ export function handleRenameLobbySelf(
 export function handleSetLobbyTheme(
   room: Room,
   playerId: string,
-  theme: string | undefined
+  themes: string[] | undefined
 ): { ok: true; room: Room } | { ok: false; error: string } {
   const r = getRoomForPlayer(room, playerId);
   if (!r || r.phase !== "lobby") {
     return { ok: false, error: "Not in lobby" };
   }
-  const t = theme?.trim() ?? "";
-  const allowedThemes = new Set(getThemeLabelsFromScenarioPool());
-  if (!t || !allowedThemes.has(t)) {
-    return { ok: false, error: "Pick a theme from the list" };
+  const selected = normalizeLobbyThemes(themes);
+  if (
+    !r.lobbyUseAiScenario &&
+    selected.length > 0 &&
+    !hasScenarioCombinationInPool(selected)
+  ) {
+    return { ok: false, error: "Pick a valid theme combination" };
   }
-  r.lobbyTheme = t;
+  r.lobbyThemes = selected;
+  if (!r.lobbyUseAiScenario && r.lobbyThemes.length > 0) {
+    const allowedOptions = new Set(
+      getThemeOptionsForSelectionFromScenarioPool(r.lobbyThemes)
+    );
+    r.lobbyThemes = r.lobbyThemes.filter((theme) => allowedOptions.has(theme));
+  }
+  return { ok: true, room: r };
+}
+
+export function handleSetLobbyUseAiScenario(
+  room: Room,
+  playerId: string,
+  useAiScenario: boolean | undefined
+): { ok: true; room: Room } | { ok: false; error: string } {
+  const r = getRoomForPlayer(room, playerId);
+  if (!r || r.phase !== "lobby") {
+    return { ok: false, error: "Not in lobby" };
+  }
+  const nextUseAiScenario = Boolean(useAiScenario);
+  const modeChanged = r.lobbyUseAiScenario !== nextUseAiScenario;
+  r.lobbyUseAiScenario = nextUseAiScenario;
+  if (modeChanged) {
+    r.lobbyThemes = [];
+  }
   return { ok: true, room: r };
 }
 
@@ -395,28 +451,16 @@ export function handleSetHostLlm(
   return { ok: true, room: r };
 }
 
-export function handleStartGame(
+export async function handleStartGame(
   room: Room,
   playerId: string,
-  themeFromPayload: string | undefined,
+  themesFromPayload: string[] | undefined,
+  useAiScenarioFromPayload: boolean | undefined,
   modeFromPayload: string | undefined
-): { ok: true; room: Room } | { ok: false; error: string } {
+): Promise<{ ok: true; room: Room } | { ok: false; error: string }> {
   const r = getRoomForPlayer(room, playerId);
   if (!r) return { ok: false, error: "Not in a room" };
   if (r.phase !== "lobby") return { ok: false, error: "Game already in progress" };
-  if (r.players.length < 2) {
-    return { ok: false, error: "Need at least 2 players" };
-  }
-
-  const allowedThemes = new Set(getThemeLabelsFromScenarioPool());
-  const themeFromPayloadTrim = themeFromPayload?.trim();
-  const theme =
-    themeFromPayloadTrim && allowedThemes.has(themeFromPayloadTrim)
-      ? themeFromPayloadTrim
-      : r.lobbyTheme?.trim() ?? "";
-  if (!theme || !allowedThemes.has(theme)) {
-    return { ok: false, error: "Pick a theme from the list" };
-  }
   const payloadMode = modeFromPayload?.trim() ?? "";
   const mode =
     payloadMode === "imposter" || payloadMode === "mission"
@@ -425,7 +469,31 @@ export function handleStartGame(
   if (mode !== "imposter" && mode !== "mission") {
     return { ok: false, error: "Pick a valid mode" };
   }
+  const minPlayersRequired = mode === "mission" ? 1 : 2;
+  if (r.players.length < minPlayersRequired) {
+    return {
+      ok: false,
+      error:
+        mode === "mission"
+          ? "Need at least 1 player for Mission mode"
+          : "Need at least 2 players",
+    };
+  }
 
+  const selectedThemes =
+    themesFromPayload && themesFromPayload.length > 0
+      ? normalizeLobbyThemes(themesFromPayload)
+      : normalizeLobbyThemes(r.lobbyThemes);
+  const useAiScenario =
+    typeof useAiScenarioFromPayload === "boolean"
+      ? useAiScenarioFromPayload
+      : r.lobbyUseAiScenario;
+  if (selectedThemes.length === 0) {
+    return { ok: false, error: "Pick at least one theme" };
+  }
+  if (!hasScenarioCombinationInPool(selectedThemes) && !useAiScenario) {
+    return { ok: false, error: "Pick a valid theme combination" };
+  }
   if (!isRoomLlmConfigured(r.hostLlm)) {
     return {
       ok: false,
@@ -434,12 +502,33 @@ export function handleStartGame(
     };
   }
 
-  const fromPool = pickRandomScenarioFromPool(theme);
-  if (!fromPool) {
-    return { ok: false, error: "No scenario available for this theme" };
+  const selectedThemeSummary = selectedThemes.join(", ");
+  let setup =
+    !useAiScenario
+      ? pickRandomScenarioFromPoolByThemes(selectedThemes)
+      : null;
+  if (useAiScenario) {
+    try {
+      setup = await generateGameSetup(selectedThemeSummary, undefined, r.hostLlm);
+    } catch (error) {
+      console.error("handleStartGame generateGameSetup", error);
+      // Fallback to prebuilt pool if this theme combination exists.
+      setup = hasScenarioCombinationInPool(selectedThemes)
+        ? pickRandomScenarioFromPoolByThemes(selectedThemes)
+        : null;
+      if (!setup) {
+        return {
+          ok: false,
+          error:
+            "AI failed to generate a scenario right now. Please try again, switch model/host, or use a prebuilt theme combination.",
+        };
+      }
+    }
   }
-
-  const { situation, worldState } = fromPool;
+  if (!setup) {
+    return { ok: false, error: "No scenario available for selected themes" };
+  }
+  const { situation, worldState } = setup;
 
   if (mode === "imposter") {
     const imposterIndex = Math.floor(Math.random() * r.players.length);
@@ -452,6 +541,8 @@ export function handleStartGame(
     });
   }
   r.lobbyMode = mode;
+  r.lobbyThemes = selectedThemes;
+  r.lobbyUseAiScenario = useAiScenario;
   r.phase = "playing";
   r.currentTurn = 0;
   r.roundIndex = 0;

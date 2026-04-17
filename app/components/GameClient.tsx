@@ -29,6 +29,7 @@ import {
   isRoomLlmReadyPublic,
   type SetHostLlmBody,
 } from "@/lib/host-llm-config";
+import { hasScenarioThemeCombination } from "@/lib/scenario-theme-combinations";
 import { SCENARIO_THEME_LABELS } from "@/lib/scenario-theme-labels";
 
 type UiTheme = "light" | "dark";
@@ -561,7 +562,7 @@ function GameClient() {
     }
   };
 
-  const handleSetLobbyTheme = async (theme: string) => {
+  const handleSetLobbyThemes = async (themes: string[]) => {
     setError("");
     setLobbyThemeSaving(true);
     try {
@@ -569,11 +570,32 @@ function GameClient() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme }),
+        body: JSON.stringify({ themes }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setError(data.error ?? "Could not set theme");
+        setError(data.error ?? "Could not set themes");
+        return;
+      }
+      await pullGameState();
+    } finally {
+      setLobbyThemeSaving(false);
+    }
+  };
+
+  const handleSetLobbyUseAiScenario = async (useAiScenario: boolean) => {
+    setError("");
+    setLobbyThemeSaving(true);
+    try {
+      const res = await fetch("/api/game/set-lobby-ai-scenario", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useAiScenario }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Could not set AI scenario mode");
         return;
       }
       await pullGameState();
@@ -633,9 +655,23 @@ function GameClient() {
   const handleStartGame = async () => {
     setError("");
     if (!roomState) return;
-    const themeToUse = roomState.lobbyTheme?.trim() ?? "";
-    if (!themeToUse || !SCENARIO_THEME_LABELS.includes(themeToUse)) {
-      setError("Pick a theme from the list");
+    const selectedThemes = roomState.lobbyThemes ?? [];
+    if (!selectedThemes.length) {
+      setError("Pick at least one theme");
+      return;
+    }
+    const allValidLabels = selectedThemes.every((theme) =>
+      SCENARIO_THEME_LABELS.includes(theme)
+    );
+    if (!allValidLabels) {
+      setError("Pick themes from the list");
+      return;
+    }
+    if (
+      !roomState.lobbyUseAiScenario &&
+      !hasScenarioThemeCombination(selectedThemes)
+    ) {
+      setError("Pick a valid theme combination");
       return;
     }
     setIsStarting(true);
@@ -644,7 +680,8 @@ function GameClient() {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        theme: themeToUse,
+        themes: selectedThemes,
+        useAiScenario: roomState.lobbyUseAiScenario,
         mode: roomState.lobbyMode ?? "imposter",
       }),
     });
@@ -846,7 +883,8 @@ function GameClient() {
             isRoomHost={isRoomHost}
             renameSaving={lobbyRenameSaving}
             onStartGame={handleStartGame}
-            onSetLobbyTheme={handleSetLobbyTheme}
+            onSetLobbyThemes={handleSetLobbyThemes}
+            onSetLobbyUseAiScenario={handleSetLobbyUseAiScenario}
             onSetLobbyMode={handleSetLobbyMode}
             onRenameDisplayName={handleRenameLobbyDisplayName}
             onOpenEndGameConfirm={() => setEndGameConfirmOpen(true)}

@@ -51,8 +51,10 @@ export type Room = {
   worldState: WorldState;
   /** Narrative situation (generated from theme by LLM) */
   situation?: string;
-  /** Selected scenario theme in lobby; broadcast to all players in real time */
-  lobbyTheme: string;
+  /** Selected scenario themes in lobby; broadcast to all players in real time */
+  lobbyThemes: string[];
+  /** Use AI to generate scenario from selected themes (default: false). */
+  lobbyUseAiScenario: boolean;
   /** Lobby mode: with Imposter (default) or mission-only. */
   lobbyMode: "imposter" | "mission";
   /** Server-only in practice: excluded from `getPublicRoomState`. */

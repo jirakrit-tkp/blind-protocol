@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "crypto";
 import type { Room, RoomLog } from "./types";
 import { JOIN_CODE_LENGTH } from "./game-api-constants";
-import { normalizeRoom, defaultLobbyTheme } from "./main-room-engine";
+import { normalizeRoom } from "./main-room-engine";
 import { encryptHostLlmSecretsForStorage } from "./host-llm-secrets";
 import { getServiceSupabase } from "./supabase/service";
 
@@ -42,7 +42,8 @@ export function emptyRoomSnapshot(roomId: string): Room {
     roundIndex: 0,
     phase: "lobby",
     worldState: {},
-    lobbyTheme: defaultLobbyTheme(),
+    lobbyThemes: [],
+    lobbyUseAiScenario: false,
     lobbyMode: "imposter",
     votes: {},
   };
