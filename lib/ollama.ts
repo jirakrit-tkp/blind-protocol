@@ -1,35 +1,25 @@
-import type { WorldState } from "./types";
+import { completeLlmPrompt } from "./llm-client";
+import type { LlmAgentKind } from "./llm-client";
+import type { HostLlmRoomConfig, WorldState } from "./types";
 import {
   MISSION_SUCCESS,
   SYSTEM_PROTAGONIST_ALIVE,
   defaultSystemWorldState,
 } from "./world-state";
 
-export async function askAI(prompt: string): Promise<string> {
-  const response = await fetch("http://localhost:11434/api/generate", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "qwen2.5:14b-instruct",
-      prompt,
-      stream: false,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
-  }
-
-  const data = (await response.json()) as { response?: string };
-  return data.response ?? "";
+export async function askAI(
+  prompt: string,
+  hostLlm?: HostLlmRoomConfig | null,
+  agent: LlmAgentKind = "narrator"
+): Promise<string> {
+  return completeLlmPrompt(prompt, hostLlm ?? null, agent);
 }
 
 /** Generate situation + initial world state from theme + optional brief */
 export async function generateGameSetup(
   theme: string,
-  brief?: string
+  brief?: string,
+  hostLlm?: HostLlmRoomConfig | null
 ): Promise<{ situation: string; worldState: WorldState }> {
   const briefPart = brief?.trim()
     ? `\nPlayers also provided this brief (use it to shape the situation): "${brief}"`
@@ -43,20 +33,34 @@ ${briefPart}
 
 Generate a game setup. Write EVERYTHING in Thai.
 
+Design style requirement (must follow):
+- Follow docs/scenario-design.md pattern used by the "gold shop robbery" reference.
+- Scenario must clearly encode 2 layers:
+  1) Rules (what immediately means mission fail) -> worldState keys with rule_*
+  2) Goals (what clearly means mission success) -> worldState keys with goal_*
+- The mission in situation must define success as an observable real-world outcome, not merely "called for help" or "reported incident".
+- Situation should describe observable opening state (what the protagonist can perceive now), and worldState should mirror that opening consistently.
+
 1. situation: 2-3 sentences. Use "เรา" (we)—start with "เราคือ..." or "เราเป็น...". The MISSION must be CONCRETE and ACTIONABLE—a specific task we can do right away. NOT vague investigation.
    - Good: "ภารกิจคือเปิดประตูห้องควบคุม", "ภารกิจคือซ่อมเครื่องยนต์ให้ทำงาน", "ภารกิจคือนำกุญแจ 3 ดอกมาที่ประตูหลัก"
    - Bad: "ค้นหาเหตุผลการหายตัว", "สอบสวนเรื่องราวประหลาด", "สำรวจสถานีลึกลับ"—too vague, no clear action.
-2. worldState: 4-8 key-value pairs. MUST include system_protagonist_alive: "yes". Use snake_case keys.
+2. worldState: 8-16 key-value pairs. MUST include:
+   - system_protagonist_alive: "yes"
+   - at least one rule_* key initialized to "no"
+   - at least one goal_* key initialized to "no"
+   Use snake_case keys.
 
 World state rules (critical):
 - ALWAYS include system_protagonist_alive: "yes" (required) — system: players can still control the shared protagonist
-- Store environment conditions: locked/unlocked, damaged/intact, on/off, level (0-100)
-- NO counts, NO event flags, NO mental/social state
+- Prefer observable environment/situation states (doors, lights, exits, threat visibility, nearby resources, crowd/noise, etc.)
+- rule_* means fail condition happened ("yes" = failed)
+- goal_* means success condition happened ("yes" = achieved)
+- Keep values concise and concrete
 
 Respond with ONLY valid JSON. situation must be in Thai:
 {"situation":"เราคือ...","worldState":{"key":"value","key2":123}}`;
 
-  const raw = await askAI(prompt);
+  const raw = await askAI(prompt, hostLlm, "setup");
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     return {
@@ -390,14 +394,17 @@ function narrativeNeedsThaiOnlyPass(text: string): boolean {
 /**
  * Layer A: ถ้าตรวจพบภาษาอื่น (หรือไม่มีอักษรไทยเลย) เรียก AI อีกครั้งให้รวมเป็นภาษาไทยล้วนหนึ่งย่อหน้า
  */
-export async function ensureNarrativeThaiOnly(narrative: string): Promise<string> {
+export async function ensureNarrativeThaiOnly(
+  narrative: string,
+  hostLlm?: HostLlmRoomConfig | null
+): Promise<string> {
   const t = narrative.trim();
   if (!narrativeNeedsThaiOnlyPass(t)) return t;
   try {
     const prompt = `The text below may contain Chinese, English, Korean, or other languages alone or mixed with Thai. Rewrite as ONE continuous paragraph in Thai ONLY (Thai script). Preserve who does what, dialogue meaning, and tension; translate any non-Thai into natural Thai. No other scripts, no meta-commentary, no notes:
 
 ${t}`;
-    return parseNarratorOutput(await askAI(prompt));
+    return parseNarratorOutput(await askAI(prompt, hostLlm, "translator"));
   } catch {
     return t;
   }
@@ -420,24 +427,30 @@ export async function runThreeLayerPlayerTurn(params: {
   recentActions: string[];
   playerAction: string;
   worldState: WorldState;
+  hostLlm?: HostLlmRoomConfig | null;
 }): Promise<ThreeLayerGmResult> {
-  const { situation, recentActions, playerAction, worldState } = params;
+  const { situation, recentActions, playerAction, worldState, hostLlm } =
+    params;
 
   let narrativeRaw: string;
   try {
     narrativeRaw = await askAI(
-      buildNarratorPrompt(situation, recentActions, playerAction, worldState)
+      buildNarratorPrompt(situation, recentActions, playerAction, worldState),
+      hostLlm,
+      "narrator"
     );
   } catch {
     narrativeRaw = `[ห้องสั่น — ระบบเล่าเรื่องไม่พร้อม]`;
   }
   let narrative = parseNarratorOutput(narrativeRaw);
-  narrative = await ensureNarrativeThaiOnly(narrative);
+  narrative = await ensureNarrativeThaiOnly(narrative, hostLlm);
 
   let sceneRaw = "";
   try {
     sceneRaw = await askAI(
-      buildSceneDeltaPrompt(situation, worldState, narrative, playerAction)
+      buildSceneDeltaPrompt(situation, worldState, narrative, playerAction),
+      hostLlm,
+      "scene"
     );
   } catch {
     sceneRaw = "";
@@ -449,7 +462,9 @@ export async function runThreeLayerPlayerTurn(params: {
   let outcomeRaw = "";
   try {
     outcomeRaw = await askAI(
-      buildOutcomePrompt(situation, worldAfterScene, narrative, playerAction)
+      buildOutcomePrompt(situation, worldAfterScene, narrative, playerAction),
+      hostLlm,
+      "outcome"
     );
   } catch {
     outcomeRaw = "";
@@ -468,24 +483,29 @@ export async function runThreeLayerAftermathStep(params: {
   situation: string;
   recentEvents: string[];
   worldState: WorldState;
+  hostLlm?: HostLlmRoomConfig | null;
 }): Promise<ThreeLayerGmResult> {
-  const { situation, recentEvents, worldState } = params;
+  const { situation, recentEvents, worldState, hostLlm } = params;
 
   let narrativeRaw: string;
   try {
     narrativeRaw = await askAI(
-      buildAftermathNarratorPrompt(situation, recentEvents, worldState)
+      buildAftermathNarratorPrompt(situation, recentEvents, worldState),
+      hostLlm,
+      "narrator"
     );
   } catch {
     narrativeRaw = `[เหตุการณ์ดำเนินต่อ — ระบบ AI ไม่พร้อม]`;
   }
   let narrative = parseNarratorOutput(narrativeRaw);
-  narrative = await ensureNarrativeThaiOnly(narrative);
+  narrative = await ensureNarrativeThaiOnly(narrative, hostLlm);
 
   let sceneRaw = "";
   try {
     sceneRaw = await askAI(
-      buildAftermathSceneDeltaPrompt(situation, worldState, narrative)
+      buildAftermathSceneDeltaPrompt(situation, worldState, narrative),
+      hostLlm,
+      "scene"
     );
   } catch {
     sceneRaw = "";
@@ -497,7 +517,9 @@ export async function runThreeLayerAftermathStep(params: {
   let outcomeRaw = "";
   try {
     outcomeRaw = await askAI(
-      buildAftermathOutcomePrompt(situation, worldAfterScene, narrative)
+      buildAftermathOutcomePrompt(situation, worldAfterScene, narrative),
+      hostLlm,
+      "outcome"
     );
   } catch {
     outcomeRaw = "";

@@ -1,11 +1,12 @@
 # Blind Protocol
 
-Multiplayer lobby + Socket.IO game UI built with [Next.js](https://nextjs.org).
+Multiplayer lobby + realtime game UI on [Next.js](https://nextjs.org), backed by [Supabase](https://supabase.com) (Postgres + Realtime). Deploy a single app on **Vercel** — each group uses its **own room** via a short **join code** (no shared passcode).
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) (LTS recommended)
 - npm (comes with Node)
+- A [Supabase](https://supabase.com) project
 
 ## Install
 
@@ -13,69 +14,64 @@ Multiplayer lobby + Socket.IO game UI built with [Next.js](https://nextjs.org).
 npm install
 ```
 
+## Supabase setup
+
+1. Create a project in the Supabase dashboard.
+2. Open **SQL Editor** and run:
+   - `supabase/migrations/20260413130000_multi_room.sql`  
+   (If you still have legacy `blind_protocol_*` tables, this migration drops them and creates the multi-room schema.)
+3. Under **Database → Replication**, confirm **Realtime** is enabled for **`game_room_ticks`** (the migration adds it to `supabase_realtime`).
+4. **Project Settings → API**: copy Project URL, anon/publishable key, and **service_role** secret.
+
+Optional: for **typing indicators** (Realtime Broadcast), adjust Realtime policies if your project restricts broadcast (see [Broadcast](https://supabase.com/docs/guides/realtime/broadcast)).
+
 ## Configuration
 
-Copy the example env file and edit values as needed:
-
-```bash
-copy .env.example .env.local
-```
-
-On macOS or Linux:
-
-```bash
-cp .env.example .env.local
-```
+Copy `.env.example` to `.env` or `.env.local` and fill in values.
 
 | Variable | Purpose |
 | --- | --- |
-| `GAME_PASSCODE` | Room password players enter on the login screen. Used by the Socket.IO server (`npm run socket`). Default in code is `JourneyToJupiter` if unset. |
-| `NEXT_PUBLIC_SOCKET_URL` | Public **https** URL of the Socket server when you open the app through a tunnel (see below). If unset, the browser uses `http://localhost:3001`. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (public). |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key (or use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` with the same value). |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role — **server only**; used by `/api/game/*`. |
 
-After changing `NEXT_PUBLIC_*` variables, restart the Next.js dev server.
+Add any **Ollama / LLM** variables your `lib/ollama.ts` setup expects.
 
-## Run the game (development)
+Restart the dev server after changing `NEXT_PUBLIC_*`.
 
-The app has two processes:
+### Test Supabase
 
-- **Next.js** — web UI on [http://localhost:3000](http://localhost:3000)
-- **Socket.IO** — realtime server on port **3001**
+With `npm run dev`, open **http://localhost:3000/api/supabase/health** — expect `"ok": true` and `tables.game_rooms` / `game_room_ticks` true.
 
-Start both in one terminal:
-
-```bash
-npm run dev:all
-```
-
-Or run them separately (two terminals):
+## Run locally
 
 ```bash
 npm run dev
 ```
 
-```bash
-npm run socket
-```
-
-Open [http://localhost:3000](http://localhost:3000), enter the passcode (same as `GAME_PASSCODE`) and your display name, then join the lobby.
+- **Create room** — you become the first player; share the **6-character code** (or `/?join=CODE`).
+- **Join room** — enter code + your name.
 
 ### Scripts
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Next.js dev server only (port 3000) |
-| `npm run socket` | Socket.IO server only (port 3001) |
-| `npm run dev:all` | Both, via [concurrently](https://www.npmjs.com/package/concurrently) |
-| `npm run build` / `npm run start` | Production build and serve (Next only; you still need the socket server running separately for full game behavior) |
+| `npm run dev` | Dev server |
+| `npm run build` / `npm run start` | Production |
 | `npm run lint` | ESLint |
 
-## Play with others over the internet (optional)
+## Deploy (Vercel)
 
-Browsers block a **public** page from calling `http://localhost:3001`, so you need two HTTPS tunnels (e.g. [Cloudflare Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) with [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)):
+Set the same env vars (including `SUPABASE_SERVICE_ROLE_KEY`). Run the migration on the linked Supabase project. Long GM turns: `/api/game/action` uses `maxDuration` — upgrade Vercel plan if timeouts occur.
 
-1. Keep `npm run dev:all` running.
-2. Terminal A: `cloudflared tunnel --url http://localhost:3000` — share this URL to open the game.
-3. Terminal B: `cloudflared tunnel --url http://localhost:3001` — put its **https** URL in `.env.local` as `NEXT_PUBLIC_SOCKET_URL` (no trailing slash).
-4. Restart `npm run dev` (or `dev:all`) so Next picks up the env var.
+## Database model
 
-Quick tunnel URLs change each time you restart `cloudflared`.
+- **`game_rooms`** — one row per room: `join_code`, `snapshot` (full game state JSON), `rev` (optimistic locking).
+- **`game_room_ticks`** — one row per room; **Realtime** notifies clients to refetch `GET /api/game/state`.
+- **`game_players`** / **`game_logs`** — denormalized copies of players and logs (synced on each save) for SQL/reporting.
+
+## Architecture
+
+- **Next.js** Route Handlers under `app/api/game/*`.
+- **HttpOnly cookies** `blind_protocol_room_id` + `blind_protocol_player_id` identify the active session (one room per browser profile at a time).
+- **GET /api/game/state** returns role-filtered state for the cookie’s player.

@@ -67,6 +67,16 @@ function matchesTheme(entry: ScenarioFileEntry, theme: string): boolean {
   return entry.themes.some((tag) => tag === t);
 }
 
+function normalizeThemeSelection(themes: readonly string[]): string[] {
+  return Array.from(
+    new Set(
+      themes
+        .map((theme) => theme.trim())
+        .filter((theme) => theme.length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b, "th"));
+}
+
 /** แท็กธีมจาก pool ที่โหลดได้ (ไม่ซ้ำ เรียงตาม locale) — ใช้สำหรับ UI / ตรวจ server */
 export function getThemeLabelsFromScenarioPool(): string[] {
   const pool = loadPool();
@@ -75,6 +85,33 @@ export function getThemeLabelsFromScenarioPool(): string[] {
     for (const t of e.themes) set.add(t);
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b, "th"));
+}
+
+export function getThemeOptionsForSelectionFromScenarioPool(
+  selectedThemes: readonly string[]
+): string[] {
+  const pool = loadPool();
+  if (pool.length === 0) return [];
+  const selected = normalizeThemeSelection(selectedThemes);
+  if (selected.length === 0) return getThemeLabelsFromScenarioPool();
+
+  const options = new Set<string>();
+  for (const entry of pool) {
+    const hasAllSelected = selected.every((theme) => matchesTheme(entry, theme));
+    if (!hasAllSelected) continue;
+    for (const theme of entry.themes) options.add(theme);
+  }
+  return Array.from(options).sort((a, b) => a.localeCompare(b, "th"));
+}
+
+export function hasScenarioCombinationInPool(
+  selectedThemes: readonly string[]
+): boolean {
+  const pool = loadPool();
+  if (pool.length === 0) return false;
+  const selected = normalizeThemeSelection(selectedThemes);
+  if (selected.length === 0) return false;
+  return pool.some((entry) => selected.every((theme) => matchesTheme(entry, theme)));
 }
 
 /**
@@ -92,6 +129,30 @@ export function pickRandomScenarioFromPool(theme: string): {
   if (!t) return null;
 
   const matched = pool.filter((e) => matchesTheme(e, t));
+  if (matched.length === 0) return null;
+
+  const i = Math.floor(Math.random() * matched.length);
+  const chosen = matched[i];
+  return {
+    situation: chosen.situation.trim(),
+    worldState: normalizeWorldState(chosen.worldState),
+  };
+}
+
+export function pickRandomScenarioFromPoolByThemes(
+  selectedThemes: readonly string[]
+): {
+  situation: string;
+  worldState: WorldState;
+} | null {
+  const pool = loadPool();
+  if (pool.length === 0) return null;
+  const selected = normalizeThemeSelection(selectedThemes);
+  if (selected.length === 0) return null;
+
+  const matched = pool.filter((entry) =>
+    selected.every((theme) => matchesTheme(entry, theme))
+  );
   if (matched.length === 0) return null;
 
   const i = Math.floor(Math.random() * matched.length);
