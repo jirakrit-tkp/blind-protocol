@@ -1,11 +1,7 @@
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import rawScenarios from "../data/scenarios.json";
 import type { WorldState } from "./types";
 import { isValidScenarioThemeTags } from "./scenario-theme-tags";
 import { SYSTEM_PROTAGONIST_ALIVE, defaultSystemWorldState } from "./world-state";
-
-const libDir = dirname(fileURLToPath(import.meta.url));
 
 type ScenarioFileEntry = {
   /** แท็กธีมจาก scenario (สตริงไทยหรืออื่น ๆ) อย่างน้อย 1 รายการ */
@@ -19,10 +15,6 @@ type ScenarioFile = {
 };
 
 let cached: ScenarioFileEntry[] | null = null;
-
-function scenarioPoolPath(): string {
-  return join(libDir, "..", "data", "scenarios.json");
-}
 
 function isValidScenarioEntry(s: unknown): s is ScenarioFileEntry {
   if (!s || typeof s !== "object") return false;
@@ -41,8 +33,7 @@ function isValidScenarioEntry(s: unknown): s is ScenarioFileEntry {
 function loadPool(): ScenarioFileEntry[] {
   if (cached) return cached;
   try {
-    const raw = readFileSync(scenarioPoolPath(), "utf-8");
-    const parsed = JSON.parse(raw) as ScenarioFile;
+    const parsed = rawScenarios as unknown as ScenarioFile;
     const list = Array.isArray(parsed.scenarios) ? parsed.scenarios : [];
     cached = list.filter(isValidScenarioEntry);
   } catch {
